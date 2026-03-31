@@ -42,7 +42,8 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
-    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    # Print SQL, parameters, and results directly to console.
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: auto
@@ -59,6 +60,8 @@ logging:
     root: INFO
     com.scm: INFO
     com.baomidou.mybatisplus: INFO
+    # MyBatis SQL logs (Prepare/Parameters/Total) for CRUD tracing.
+    org.apache.ibatis: INFO
 
 # Integration toggles (production: replace stub / in-memory with real IPFS + FISCO BCOS clients)
 scm:
@@ -71,7 +74,7 @@ scm:
     fisco:
       config-file: conf/config.toml
       group-id: 1
-      contract-address: 0xe083bed62cb5fb49a844dbbc17b1cd0539d38700
+      contract-address: "0xe083bed62cb5fb49a844dbbc17b1cd0539d38700"
       abi-path: conf/abi
       bin-path: conf/bin
   scheduler:
