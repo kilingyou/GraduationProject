@@ -41,4 +41,6 @@ public class SysUser {
 
     @TableField(exist = false)
     private String roleKey;
+    @TableField(exist = false)
+    private String supplierAuditStatus;
 }

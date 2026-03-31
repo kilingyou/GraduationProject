@@ -138,6 +138,7 @@ com\scm\integration\ipfs\InMemoryIpfsStorageService.class
 com\scm\module\enduser\controller\ComplaintController.class
 com\scm\module\manufacturer\controller\ManufacturerOrderController.class
 com\scm\module\enduser\service\impl\TraceServiceImpl.class
+com\scm\module\supplier\service\SupplierAuditGuardService.class
 com\scm\common\Result.class
 com\scm\module\regulator\service\impl\InspectionTaskServiceImpl.class
 com\scm\module\assembler\mapper\AssemblyBatchMapper.class

@@ -13,7 +13,12 @@ export const useUserStore = defineStore('user', {
   getters: {
     isLoggedIn: state => !!state.token,
     roleKey: state => state.userInfo?.roleKey || '',
-    userId: state => state.userInfo?.id || null
+    userId: state => state.userInfo?.id || null,
+    supplierAuditStatus: state => state.userInfo?.supplierAuditStatus || '',
+    isSupplierApproved: state => {
+      if (state.userInfo?.roleKey !== 'supplier') return true
+      return state.userInfo?.supplierAuditStatus === 'APPROVED'
+    }
   },
 
   actions: {

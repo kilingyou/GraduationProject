@@ -10,6 +10,7 @@ import com.scm.module.supplier.dto.BomVO;
 import com.scm.module.supplier.entity.Bom;
 import com.scm.module.supplier.entity.BomItem;
 import com.scm.module.supplier.service.BomService;
+import com.scm.module.supplier.service.SupplierAuditGuardService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -31,10 +32,12 @@ import java.util.List;
 public class BomController {
 
     private final BomService bomService;
+    private final SupplierAuditGuardService supplierAuditGuardService;
 
     @PostMapping
     public Result<Bom> create(@RequestBody Bom bom) {
         LoginUser loginUser = getCurrentUser();
+        supplierAuditGuardService.ensureApproved(loginUser.getUserId());
         bom.setSupplierId(loginUser.getUserId());
 
         List<BomItem> items = bom.getItems();
@@ -71,7 +74,9 @@ public class BomController {
 
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
-        bomService.removeBomForSupplier(id, getCurrentUser().getUserId());
+        LoginUser loginUser = getCurrentUser();
+        supplierAuditGuardService.ensureApproved(loginUser.getUserId());
+        bomService.removeBomForSupplier(id, loginUser.getUserId());
         return Result.ok();
     }
 

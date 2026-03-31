@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="table-toolbar">
       <div class="search-bar">
-        <el-button type="primary" @click="openCreateDialog">
+        <el-button type="primary" :disabled="!isSupplierApproved" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>发布生产订单
         </el-button>
         <el-select
@@ -137,9 +137,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { useUserStore } from '@/store/user'
 import {
   createProductionOrder,
   getProductionOrderList,
@@ -174,6 +175,8 @@ const detail = ref({})
 const createFormRef = ref()
 const bomOptions = ref([])
 const manufacturerOptions = ref([])
+const userStore = useUserStore()
+const isSupplierApproved = computed(() => userStore.isSupplierApproved)
 
 const queryParams = reactive({
   status: '',
@@ -234,6 +237,10 @@ async function fetchManufacturers() {
 }
 
 function openCreateDialog() {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可发布生产订单')
+    return
+  }
   fetchBomOptions()
   fetchManufacturers()
   createDialogVisible.value = true
@@ -245,6 +252,10 @@ function resetCreateForm() {
 }
 
 async function submitCreate() {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可发布生产订单')
+    return
+  }
   const valid = await createFormRef.value.validate().catch(() => false)
   if (!valid) return
 

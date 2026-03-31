@@ -6,6 +6,7 @@ import com.scm.common.PageResult;
 import com.scm.common.Result;
 import com.scm.module.supplier.entity.DesignDocument;
 import com.scm.module.supplier.service.DesignDocumentService;
+import com.scm.module.supplier.service.SupplierAuditGuardService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,6 +21,7 @@ import java.io.IOException;
 public class DesignDocumentController {
 
     private final DesignDocumentService designDocumentService;
+    private final SupplierAuditGuardService supplierAuditGuardService;
 
     @PostMapping("/upload")
     public Result<DesignDocument> upload(@RequestParam("file") MultipartFile file,
@@ -28,6 +30,7 @@ public class DesignDocumentController {
                                          @RequestParam(value = "version", required = false) String version,
                                          @RequestParam(value = "updateNote", required = false) String updateNote) {
         LoginUser loginUser = getCurrentUser();
+        supplierAuditGuardService.ensureApproved(loginUser.getUserId());
 
         DesignDocument doc = new DesignDocument()
                 .setSupplierId(loginUser.getUserId())
@@ -87,7 +90,9 @@ public class DesignDocumentController {
 
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
-        designDocumentService.deleteOwnedIfUnused(id, getCurrentUser().getUserId());
+        LoginUser loginUser = getCurrentUser();
+        supplierAuditGuardService.ensureApproved(loginUser.getUserId());
+        designDocumentService.deleteOwnedIfUnused(id, loginUser.getUserId());
         return Result.ok();
     }
 

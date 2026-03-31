@@ -111,6 +111,14 @@
       </el-header>
 
       <el-main class="layout-main">
+        <el-alert
+          v-if="showSupplierPendingAlert"
+          title="供应商资质审核中：当前仅可查看信息，发布生产订单等操作将在审核通过后开放。"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px"
+        />
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -144,6 +152,9 @@ const roleLabels = {
 
 const roleKey = computed(() => userStore.userInfo?.roleKey || '')
 const roleLabel = computed(() => roleLabels[roleKey.value] || roleKey.value)
+const showSupplierPendingAlert = computed(() =>
+  roleKey.value === 'supplier' && userStore.userInfo?.supplierAuditStatus !== 'APPROVED'
+)
 
 const useApiMenus = computed(() => Array.isArray(userStore.menus) && userStore.menus.length > 0)
 const visibleApiMenus = computed(() => {

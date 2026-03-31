@@ -7,6 +7,7 @@ import com.scm.module.supplier.dto.ProductionRequestVO;
 import com.scm.module.supplier.entity.ProductionRequest;
 import com.scm.module.supplier.service.ProductionRequestService;
 import com.scm.module.supplier.service.ProductionRequestViewService;
+import com.scm.module.supplier.service.SupplierAuditGuardService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,10 +20,12 @@ public class ProductionRequestController {
 
     private final ProductionRequestService productionRequestService;
     private final ProductionRequestViewService productionRequestViewService;
+    private final SupplierAuditGuardService supplierAuditGuardService;
 
     @PostMapping
     public Result<ProductionRequest> create(@RequestBody ProductionRequest request) {
         LoginUser loginUser = getCurrentUser();
+        supplierAuditGuardService.ensureApproved(loginUser.getUserId());
         request.setSupplierId(loginUser.getUserId());
 
         ProductionRequest created = productionRequestService.createOrder(request);

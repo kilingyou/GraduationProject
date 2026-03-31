@@ -28,6 +28,10 @@ public class SysSupplierAudit {
     private String auditOpinion;
     private LocalDateTime auditTime;
     private String txHash;
+    @TableField(exist = false)
+    private String licenseViewUrl;
+    @TableField(exist = false)
+    private String certViewUrl;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

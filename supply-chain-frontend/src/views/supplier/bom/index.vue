@@ -1,17 +1,17 @@
 <template>
   <div class="page-container">
     <div class="table-toolbar">
-      <el-button type="primary" @click="openCreateDialog">
+      <el-button type="primary" :disabled="!isSupplierApproved" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>创建BOM
       </el-button>
-      <el-button @click="downloadBomTemplate">下载 Excel 模板</el-button>
+      <el-button :disabled="!isSupplierApproved" @click="downloadBomTemplate">下载 Excel 模板</el-button>
       <el-upload
         :auto-upload="false"
         :show-file-list="false"
         accept=".xlsx,.xls"
         :on-change="handleBomExcelPick"
       >
-        <el-button type="success" plain>Excel 导入物料</el-button>
+        <el-button type="success" plain :disabled="!isSupplierApproved">Excel 导入物料</el-button>
       </el-upload>
     </div>
 
@@ -30,7 +30,7 @@
       <el-table-column label="操作" width="160" align="center" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="handleView(row)">查看明细</el-button>
-          <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+          <el-button link type="danger" :disabled="!isSupplierApproved" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -148,7 +148,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { createBom, getBomList, getBomDetail, deleteBom, parseBomExcel } from '@/api/supplier'
@@ -164,6 +164,8 @@ const detailDialogVisible = ref(false)
 const detail = ref({})
 const createFormRef = ref()
 const designDocOptions = ref([])
+const userStore = useUserStore()
+const isSupplierApproved = computed(() => userStore.isSupplierApproved)
 
 const queryParams = reactive({
   pageNum: 1,
@@ -210,12 +212,20 @@ async function fetchDesignDocs() {
 }
 
 function openCreateDialog() {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可创建BOM')
+    return
+  }
   fetchDesignDocs()
   createDialogVisible.value = true
 }
 
 async function downloadBomTemplate() {
-  const token = useUserStore().token
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可下载模板并创建BOM')
+    return
+  }
+  const token = userStore.token
   try {
     const r = await fetch('/api/supplier/bom/import-template', {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -234,6 +244,10 @@ async function downloadBomTemplate() {
 }
 
 async function handleBomExcelPick(uploadFile) {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可导入BOM物料')
+    return
+  }
   const raw = uploadFile?.raw
   if (!raw) return
   try {
@@ -275,6 +289,10 @@ function resetCreateForm() {
 }
 
 async function submitCreate() {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可创建BOM')
+    return
+  }
   const valid = await createFormRef.value.validate().catch(() => false)
   if (!valid) return
 
@@ -313,6 +331,10 @@ async function handleView(row) {
 }
 
 async function handleDelete(row) {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可删除BOM')
+    return
+  }
   try {
     await ElMessageBox.confirm('确认删除该BOM？删除后不可恢复', '提示', { type: 'warning' })
     await deleteBom(row.id)

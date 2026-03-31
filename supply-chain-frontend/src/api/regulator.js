@@ -12,6 +12,14 @@ export function rejectSupplier(id, data) {
   return request({ url: `/regulator/audit/${id}/reject`, method: 'post', data })
 }
 
+export function getAuditFileBlob(cid) {
+  return request({
+    url: `/regulator/audit/file/${encodeURIComponent(cid)}`,
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
 export function createInspection(data) {
   return request({ url: '/regulator/inspection', method: 'post', data })
 }

@@ -4,13 +4,21 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scm.common.Result;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.ipfs.IpfsStorageService;
 import com.scm.module.system.entity.SysSupplierAudit;
 import com.scm.module.system.mapper.SysSupplierAuditMapper;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -21,13 +29,22 @@ public class AuditController {
 
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final IpfsStorageService ipfsStorageService;
+    @Value("${scm.ipfs.gateway:}")
+    private String ipfsGateway;
 
     @GetMapping("/list")
-    public Result<List<SysSupplierAudit>> list() {
-        List<SysSupplierAudit> audits = sysSupplierAuditMapper.selectList(
-                new LambdaQueryWrapper<SysSupplierAudit>()
-                        .eq(SysSupplierAudit::getAuditStatus, "PENDING")
-                        .orderByDesc(SysSupplierAudit::getCreateTime));
+    public Result<List<SysSupplierAudit>> list(@RequestParam(required = false) String status) {
+        LambdaQueryWrapper<SysSupplierAudit> wrapper = new LambdaQueryWrapper<SysSupplierAudit>()
+                .orderByDesc(SysSupplierAudit::getCreateTime);
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(SysSupplierAudit::getAuditStatus, status.trim().toUpperCase());
+        }
+        List<SysSupplierAudit> audits = sysSupplierAuditMapper.selectList(wrapper);
+        for (SysSupplierAudit audit : audits) {
+            audit.setLicenseViewUrl(buildIpfsViewUrl(audit.getLicenseIpfsCid()));
+            audit.setCertViewUrl(buildIpfsViewUrl(audit.getCertIpfsCid()));
+        }
         return Result.ok(audits);
     }
 
@@ -38,6 +55,19 @@ public class AuditController {
         if (audit == null) {
             return Result.fail("Audit record not found");
         }
+        if (!"PENDING".equalsIgnoreCase(audit.getAuditStatus())) {
+            return Result.fail("Audit already processed: " + audit.getAuditStatus());
+        }
+        // Supplier evidence is anchored only after regulator approval.
+        if (StringUtils.hasText(audit.getLicenseFileHash())) {
+            blockchainAnchorService.anchor("SUPPLIER_LICENSE", audit.getLicenseFileHash());
+        }
+        if (StringUtils.hasText(audit.getCertFileHash())) {
+            blockchainAnchorService.anchor("SUPPLIER_CERT", audit.getCertFileHash());
+        }
+        String submitPayload = audit.getUserId() + "|" + audit.getLicenseFileHash() + "|" + audit.getCertFileHash();
+        blockchainAnchorService.anchor("SUPPLIER_AUDIT_SUBMIT", HashUtil.sha256Hex(submitPayload));
+
         audit.setAuditStatus("APPROVED");
         audit.setAuditorId(loginUser.getUserId());
         audit.setAuditTime(LocalDateTime.now());
@@ -55,6 +85,9 @@ public class AuditController {
         if (audit == null) {
             return Result.fail("Audit record not found");
         }
+        if (!"PENDING".equalsIgnoreCase(audit.getAuditStatus())) {
+            return Result.fail("Audit already processed: " + audit.getAuditStatus());
+        }
         audit.setAuditStatus("REJECTED");
         audit.setAuditorId(loginUser.getUserId());
         audit.setAuditTime(LocalDateTime.now());
@@ -67,7 +100,35 @@ public class AuditController {
         return Result.ok(audit);
     }
 
+    @GetMapping("/file/{cid}")
+    public ResponseEntity<byte[]> viewFile(@PathVariable String cid) {
+        byte[] data = ipfsStorageService.get(cid);
+        if (data == null || data.length == 0) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String guessed = null;
+        try {
+            guessed = java.net.URLConnection.guessContentTypeFromStream(new ByteArrayInputStream(data));
+        } catch (Exception ignore) {
+        }
+        MediaType mediaType = StringUtils.hasText(guessed) ? MediaType.parseMediaType(guessed) : MediaType.APPLICATION_OCTET_STREAM;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.setContentDisposition(ContentDisposition.inline().filename(cid).build());
+        return ResponseEntity.ok().headers(headers).body(data);
+    }
+
     private LoginUser getCurrentUser() {
         return (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    }
+
+    private String buildIpfsViewUrl(String cid) {
+        if (!StringUtils.hasText(cid) || !StringUtils.hasText(ipfsGateway)) {
+            return null;
+        }
+        String base = ipfsGateway.endsWith("/") ? ipfsGateway : ipfsGateway + "/";
+        return base + cid;
     }
 }

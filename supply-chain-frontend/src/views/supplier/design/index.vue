@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="table-toolbar">
       <div class="search-bar">
-        <el-button type="primary" @click="uploadDialogVisible = true">
+        <el-button type="primary" :disabled="!isSupplierApproved" @click="openUploadDialog">
           <el-icon><Upload /></el-icon>上传文档
         </el-button>
         <el-input
@@ -47,7 +47,7 @@
             :loading="row._verifying"
             @click="handleVerify(row)"
           >校验哈希</el-button>
-          <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+          <el-button link type="danger" :disabled="!isSupplierApproved" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -125,9 +125,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Search } from '@element-plus/icons-vue'
+import { useUserStore } from '@/store/user'
 import {
   uploadDesignDoc,
   getDesignDocList,
@@ -145,6 +146,8 @@ const detailDialogVisible = ref(false)
 const detail = ref({})
 const uploadFormRef = ref()
 const uploadRef = ref()
+const userStore = useUserStore()
+const isSupplierApproved = computed(() => userStore.isSupplierApproved)
 
 const queryParams = reactive({
   keyword: '',
@@ -200,6 +203,10 @@ function resetUploadForm() {
 }
 
 async function submitUpload() {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可上传设计文档')
+    return
+  }
   const valid = await uploadFormRef.value.validate().catch(() => false)
   if (!valid) return
 
@@ -250,6 +257,10 @@ async function handleVerify(row) {
 }
 
 async function handleDelete(row) {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可删除设计文档')
+    return
+  }
   try {
     await ElMessageBox.confirm('确认删除该文档？删除后不可恢复', '提示', { type: 'warning' })
     await deleteDesignDoc(row.id)
@@ -258,6 +269,14 @@ async function handleDelete(row) {
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('删除失败')
   }
+}
+
+function openUploadDialog() {
+  if (!isSupplierApproved.value) {
+    ElMessage.warning('资质审核通过后才可上传设计文档')
+    return
+  }
+  uploadDialogVisible.value = true
 }
 
 onMounted(() => fetchList())

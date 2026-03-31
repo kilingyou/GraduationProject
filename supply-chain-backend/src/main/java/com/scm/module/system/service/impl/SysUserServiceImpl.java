@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
-import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.system.entity.SysRole;
@@ -88,8 +87,6 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                     audit.setCertIpfsCid(ev.getIpfsCid());
                 }
             }
-            String anchorPayload = user.getId() + "|" + audit.getLicenseFileHash() + "|" + audit.getCertFileHash();
-            audit.setTxHash(blockchainAnchorService.anchor("SUPPLIER_AUDIT_SUBMIT", HashUtil.sha256Hex(anchorPayload)));
             sysSupplierAuditMapper.insert(audit);
         }
 
@@ -107,6 +104,14 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         SysUser user = baseMapper.selectByIdWithRole(userId);
         if (user == null) {
             throw new BusinessException("用户不存在");
+        }
+        if ("supplier".equalsIgnoreCase(user.getRoleKey())) {
+            SysSupplierAudit audit = sysSupplierAuditMapper.selectOne(
+                    new LambdaQueryWrapper<SysSupplierAudit>()
+                            .eq(SysSupplierAudit::getUserId, userId)
+                            .orderByDesc(SysSupplierAudit::getCreateTime)
+                            .last("LIMIT 1"));
+            user.setSupplierAuditStatus(audit == null ? "PENDING" : audit.getAuditStatus());
         }
         user.setPassword(null);
         return user;
