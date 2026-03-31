@@ -1,0 +1,424 @@
+[
+  {
+    "constant": false,
+    "inputs": [{"name": "bizType", "type": "string"}, {"name": "payloadHash", "type": "string"}],
+    "name": "anchor",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "id", "type": "uint256"}],
+    "name": "getAnchor",
+    "outputs": [
+      {"name": "", "type": "string"},
+      {"name": "", "type": "string"},
+      {"name": "", "type": "address"},
+      {"name": "", "type": "uint256"}
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "anchorCount",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "supplier", "type": "address"}, {"name": "qualHash", "type": "string"}],
+    "name": "approveSupplier",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "supplier", "type": "address"}],
+    "name": "revokeSupplier",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "supplier", "type": "address"}],
+    "name": "isSupplierApproved",
+    "outputs": [{"name": "", "type": "bool"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "supplier", "type": "address"}],
+    "name": "approvedSuppliers",
+    "outputs": [{"name": "", "type": "bool"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "supplier", "type": "address"}],
+    "name": "getSupplierQualHash",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "ecid", "type": "string"},
+      {"name": "orderId", "type": "string"},
+      {"name": "batchId", "type": "string"},
+      {"name": "devType", "type": "string"}
+    ],
+    "name": "registerDevice",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "ecid", "type": "string"}, {"name": "newStatus", "type": "string"}],
+    "name": "updateDeviceStatus",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "ecid", "type": "string"}],
+    "name": "getDeviceStatus",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "ecid", "type": "string"}],
+    "name": "getDeviceInfo",
+    "outputs": [
+      {"name": "", "type": "string"},
+      {"name": "", "type": "string"},
+      {"name": "", "type": "string"},
+      {"name": "", "type": "address"},
+      {"name": "", "type": "uint256"},
+      {"name": "", "type": "string"}
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "sn", "type": "string"},
+      {"name": "ecidListJson", "type": "string"},
+      {"name": "batchNo", "type": "string"},
+      {"name": "fwVersion", "type": "string"},
+      {"name": "reportHash", "type": "string"}
+    ],
+    "name": "createAssemblyRecord",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "ecid", "type": "string"}, {"name": "sn", "type": "string"}],
+    "name": "bindEcidToSn",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "sn", "type": "string"}],
+    "name": "getSnEcidList",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "ecid", "type": "string"}],
+    "name": "getEcidSn",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "sn", "type": "string"}],
+    "name": "getAssemblyInfo",
+    "outputs": [
+      {"name": "", "type": "string"},
+      {"name": "", "type": "string"},
+      {"name": "", "type": "string"},
+      {"name": "", "type": "string"},
+      {"name": "", "type": "address"},
+      {"name": "", "type": "uint256"}
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "sn", "type": "string"},
+      {"name": "trackingNo", "type": "string"},
+      {"name": "receiver", "type": "address"},
+      {"name": "transferType", "type": "string"}
+    ],
+    "name": "logTransfer",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "sn", "type": "string"}],
+    "name": "getSnOwner",
+    "outputs": [{"name": "", "type": "address"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "transferCount",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "sn", "type": "string"},
+      {"name": "customerHash", "type": "string"},
+      {"name": "invoiceHash", "type": "string"}
+    ],
+    "name": "registerSale",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "sn", "type": "string"}, {"name": "disposalMethod", "type": "string"}],
+    "name": "decommissionProduct",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "sn", "type": "string"}],
+    "name": "isDecommissioned",
+    "outputs": [{"name": "", "type": "bool"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "sn", "type": "string"},
+      {"name": "faultType", "type": "string"},
+      {"name": "faultDesc", "type": "string"}
+    ],
+    "name": "requestRecall",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [{"name": "noticeNo", "type": "string"}, {"name": "affectedSns", "type": "string"}],
+    "name": "publishRecallNotice",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "targetId", "type": "string"},
+      {"name": "result", "type": "string"},
+      {"name": "reportHash", "type": "string"}
+    ],
+    "name": "logInspectionResult",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true,  "name": "id", "type": "uint256"},
+      {"indexed": false, "name": "bizType", "type": "string"},
+      {"indexed": false, "name": "payloadHash", "type": "string"},
+      {"indexed": false, "name": "operator", "type": "address"},
+      {"indexed": false, "name": "timestamp", "type": "uint256"}
+    ],
+    "name": "AnchorEvent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true,  "name": "supplier", "type": "address"},
+      {"indexed": false, "name": "qualHash", "type": "string"},
+      {"indexed": false, "name": "approver", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "SupplierApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true,  "name": "supplier", "type": "address"},
+      {"indexed": false, "name": "revoker", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "SupplierRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "ecid", "type": "string"},
+      {"indexed": false, "name": "orderId", "type": "string"},
+      {"indexed": false, "name": "batchId", "type": "string"},
+      {"indexed": false, "name": "devType", "type": "string"},
+      {"indexed": false, "name": "mfg", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "DeviceRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "ecid", "type": "string"},
+      {"indexed": false, "name": "newStatus", "type": "string"},
+      {"indexed": false, "name": "operator", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "DeviceStatusUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "sn", "type": "string"},
+      {"indexed": false, "name": "batchNo", "type": "string"},
+      {"indexed": false, "name": "ecidListJson", "type": "string"},
+      {"indexed": false, "name": "assembler", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "AssemblyRecordCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true,  "name": "id", "type": "uint256"},
+      {"indexed": false, "name": "sn", "type": "string"},
+      {"indexed": false, "name": "trackingNo", "type": "string"},
+      {"indexed": false, "name": "sender", "type": "address"},
+      {"indexed": false, "name": "receiver", "type": "address"},
+      {"indexed": false, "name": "transferType", "type": "string"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "TransferEventLogged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "sn", "type": "string"},
+      {"indexed": false, "name": "customerHash", "type": "string"},
+      {"indexed": false, "name": "invoiceHash", "type": "string"},
+      {"indexed": false, "name": "seller", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "SaleRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "sn", "type": "string"},
+      {"indexed": false, "name": "disposalMethod", "type": "string"},
+      {"indexed": false, "name": "operator", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "ProductDecommissioned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "sn", "type": "string"},
+      {"indexed": false, "name": "faultType", "type": "string"},
+      {"indexed": false, "name": "faultDesc", "type": "string"},
+      {"indexed": false, "name": "requester", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "RecallRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "noticeNo", "type": "string"},
+      {"indexed": false, "name": "affectedSns", "type": "string"},
+      {"indexed": false, "name": "regulator", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "RecallNoticePublished",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "name": "targetId", "type": "string"},
+      {"indexed": false, "name": "result", "type": "string"},
+      {"indexed": false, "name": "reportHash", "type": "string"},
+      {"indexed": false, "name": "inspector", "type": "address"},
+      {"indexed": false, "name": "ts", "type": "uint256"}
+    ],
+    "name": "InspectionResultLogged",
+    "type": "event"
+  }
+]

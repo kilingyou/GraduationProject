@@ -67,7 +67,13 @@ scm:
     api-url: http://127.0.0.1:5001
     gateway: http://127.0.0.1:8080/ipfs/
   blockchain:
-    mode: stub
+    mode: fisco
+    fisco:
+      config-file: conf/config.toml
+      group-id: 1
+      contract-address: 0xe083bed62cb5fb49a844dbbc17b1cd0539d38700
+      abi-path: conf/abi
+      bin-path: conf/bin
   scheduler:
     enabled: true
     # 扫描周期（毫秒）

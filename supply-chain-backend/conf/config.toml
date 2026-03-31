@@ -1,0 +1,32 @@
+[cryptoMaterial]
+
+certPath = "conf"                           # 证书目录（相对于工作目录）
+
+# 以下配置默认从 certPath 读取，通常不用修改
+# caCert  = "conf/ca.crt"
+# sslCert = "conf/sdk.crt"
+# sslKey  = "conf/sdk.key"
+
+# 如连接国密节点，取消下面注释
+# caCert    = "conf/gm/gmca.crt"
+# sslCert   = "conf/gm/gmsdk.crt"
+# sslKey    = "conf/gm/gmsdk.key"
+# enSslCert = "conf/gm/gmensdk.crt"
+# enSslKey  = "conf/gm/gmensdk.key"
+
+[network]
+
+# ===== 修改为你的 CentOS 7 虚拟机 IP =====
+peers=["192.168.44.135:20200", "192.168.44.135:20201"]
+
+[account]
+
+keyStoreDir = "conf/account"                # 账户文件目录
+accountFileFormat = "pem"                   # 账户格式 pem / p12
+# accountAddress = ""                       # 指定发交易账户地址（留空则自动生成）
+
+[threadPool]
+
+# channelProcessorThreadSize = "16"
+# receiptProcessorThreadSize = "16"
+maxBlockingQueueSize = "102400"

@@ -65,6 +65,7 @@ com\scm\module\system\service\SysUserService.class
 com\scm\module\enduser\service\TraceService.class
 com\scm\module\manufacturer\mapper\RejectRecordMapper.class
 com\scm\security\JwtAuthenticationFilter.class
+com\scm\integration\blockchain\FiscoBcosBlockchainAnchorService.class
 com\scm\module\assembler\dto\IntakeVerifyResult.class
 com\scm\module\distributor\mapper\SalesRecordMapper.class
 com\scm\module\manufacturer\service\QualityReportService.class
