@@ -7,6 +7,7 @@
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="queryParams.roleKey" placeholder="全部角色" clearable style="width: 140px">
+            <el-option label="系统管理员" value="admin" />
             <el-option label="供应商" value="supplier" />
             <el-option label="制造商" value="manufacturer" />
             <el-option label="组装商" value="assembler" />
@@ -101,6 +102,7 @@
         </el-form-item>
         <el-form-item label="角色" prop="roleKey">
           <el-select v-model="editForm.roleKey" style="width: 100%">
+            <el-option label="系统管理员" value="admin" />
             <el-option label="供应商" value="supplier" />
             <el-option label="制造商" value="manufacturer" />
             <el-option label="组装商" value="assembler" />
@@ -125,6 +127,7 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 
 const roleLabels = {
+  admin: '系统管理员',
   supplier: '供应商',
   manufacturer: '制造商',
   assembler: '组装商',

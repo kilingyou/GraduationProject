@@ -28,6 +28,7 @@
                 <el-option label="制造商" value="manufacturer" />
                 <el-option label="组装商" value="assembler" />
                 <el-option label="分销商" value="distributor" />
+                <el-option label="监管机构" value="regulator" />
                 <el-option label="终端用户" value="enduser" />
               </el-select>
             </el-form-item>
@@ -47,7 +48,7 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20">
+        <el-row v-if="!isEnduser" :gutter="20">
           <el-col :span="12">
             <el-form-item label="企业名称" prop="enterpriseName">
               <el-input v-model="form.enterpriseName" placeholder="请输入企业名称" />
@@ -61,41 +62,58 @@
         </el-row>
 
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col v-if="!isEnduser" :span="12">
             <el-form-item label="联系人" prop="contactPerson">
               <el-input v-model="form.contactPerson" placeholder="请输入联系人" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="isEnduser ? 24 : 12">
             <el-form-item label="联系电话" prop="phone">
               <el-input v-model="form.phone" placeholder="请输入联系电话" />
             </el-form-item>
           </el-col>
         </el-row>
 
-        <el-form-item label="电子邮箱" prop="email">
+        <el-form-item v-if="!isEnduser" label="电子邮箱" prop="email">
           <el-input v-model="form.email" placeholder="请输入电子邮箱" />
         </el-form-item>
 
-        <el-form-item v-if="form.roleKey === 'supplier'" label="资质文件">
-          <el-upload
-            v-model:file-list="fileList"
-            action="/api/upload"
-            :auto-upload="false"
-            :limit="3"
-            accept=".pdf,.jpg,.png"
-          >
-            <el-button type="primary" plain>
-              <el-icon><Upload /></el-icon>
-              选择文件
-            </el-button>
-            <template #tip>
-              <div class="el-upload__tip">
-                支持 PDF/JPG/PNG，最多 3 个文件。第 1 个存为营业执照哈希与 IPFS，第 2 个存为资质证书（可选）；其余文件当前版本忽略。
-              </div>
-            </template>
-          </el-upload>
-        </el-form-item>
+        <template v-if="form.roleKey === 'supplier'">
+          <el-form-item label="营业执照">
+            <el-upload
+              v-model:file-list="licenseFileList"
+              action="/api/upload"
+              :auto-upload="false"
+              :limit="1"
+              accept=".pdf,.jpg,.jpeg,.png"
+            >
+              <el-button type="primary" plain>
+                <el-icon><Upload /></el-icon>
+                上传营业执照
+              </el-button>
+            </el-upload>
+          </el-form-item>
+
+          <el-form-item label="资质证书（可选）">
+            <el-upload
+              v-model:file-list="certFileList"
+              action="/api/upload"
+              :auto-upload="false"
+              :limit="1"
+              accept=".pdf,.jpg,.jpeg,.png"
+            >
+              <el-button type="primary" plain>
+                <el-icon><Upload /></el-icon>
+                上传资质证书
+              </el-button>
+              <template #tip>
+                <div class="el-upload__tip">
+                  支持 PDF/JPG/JPEG/PNG。营业执照与资质证书分开上传，提交时会按顺序传给后端。
+                </div>
+              </template>
+            </el-upload>
+          </el-form-item>
+        </template>
 
         <el-form-item>
           <el-button
@@ -117,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { register } from '@/api/auth'
 import { ElMessage } from 'element-plus'
@@ -126,7 +144,8 @@ import { Upload } from '@element-plus/icons-vue'
 const router = useRouter()
 const formRef = ref()
 const loading = ref(false)
-const fileList = ref([])
+const licenseFileList = ref([])
+const certFileList = ref([])
 
 const form = reactive({
   username: '',
@@ -140,6 +159,8 @@ const form = reactive({
   roleKey: ''
 })
 
+const isEnduser = computed(() => form.roleKey === 'enduser')
+
 const validateConfirmPassword = (rule, value, callback) => {
   if (value !== form.password) {
     callback(new Error('两次输入的密码不一致'))
@@ -149,8 +170,56 @@ const validateConfirmPassword = (rule, value, callback) => {
 }
 
 const validatePhone = (rule, value, callback) => {
-  if (value && !/^1[3-9]\d{9}$/.test(value)) {
+  if (!value) {
+    if (isEnduser.value) {
+      callback(new Error('请输入联系电话'))
+    } else {
+      callback()
+    }
+    return
+  }
+  if (!/^1[3-9]\d{9}$/.test(value)) {
     callback(new Error('请输入正确的手机号码'))
+  } else {
+    callback()
+  }
+}
+
+const validateEnterpriseName = (rule, value, callback) => {
+  if (!isEnduser.value && !value) {
+    callback(new Error('请输入企业名称'))
+  } else {
+    callback()
+  }
+}
+
+const validateCreditCode = (rule, value, callback) => {
+  if (!isEnduser.value && !value) {
+    callback(new Error('请输入统一社会信用代码'))
+  } else {
+    callback()
+  }
+}
+
+const validateContactPerson = (rule, value, callback) => {
+  if (!isEnduser.value && !value) {
+    callback(new Error('请输入联系人'))
+  } else {
+    callback()
+  }
+}
+
+const validateEmail = (rule, value, callback) => {
+  if (!value) {
+    if (!isEnduser.value) {
+      callback(new Error('请输入电子邮箱'))
+    } else {
+      callback()
+    }
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    callback(new Error('请输入正确的邮箱格式'))
   } else {
     callback()
   }
@@ -169,17 +238,13 @@ const rules = {
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' }
   ],
-  enterpriseName: [{ required: true, message: '请输入企业名称', trigger: 'blur' }],
-  creditCode: [{ required: true, message: '请输入统一社会信用代码', trigger: 'blur' }],
-  contactPerson: [{ required: true, message: '请输入联系人', trigger: 'blur' }],
+  enterpriseName: [{ validator: validateEnterpriseName, trigger: 'blur' }],
+  creditCode: [{ validator: validateCreditCode, trigger: 'blur' }],
+  contactPerson: [{ validator: validateContactPerson, trigger: 'blur' }],
   phone: [
-    { required: true, message: '请输入联系电话', trigger: 'blur' },
     { validator: validatePhone, trigger: 'blur' }
   ],
-  email: [
-    { required: true, message: '请输入电子邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
-  ],
+  email: [{ validator: validateEmail, trigger: 'blur' }],
   roleKey: [{ required: true, message: '请选择角色', trigger: 'change' }]
 }
 
@@ -192,10 +257,15 @@ async function handleRegister() {
     const submitData = { ...form }
     delete submitData.confirmPassword
 
-    if (form.roleKey === 'supplier' && fileList.value.length) {
+    if (form.roleKey === 'supplier') {
       const fd = new FormData()
       Object.entries(submitData).forEach(([k, v]) => fd.append(k, v))
-      fileList.value.forEach(f => fd.append('files', f.raw))
+      if (licenseFileList.value.length > 0) {
+        fd.append('files', licenseFileList.value[0].raw)
+      }
+      if (certFileList.value.length > 0) {
+        fd.append('files', certFileList.value[0].raw)
+      }
       await register(fd)
     } else {
       await register(submitData)
@@ -209,6 +279,22 @@ async function handleRegister() {
     loading.value = false
   }
 }
+
+watch(
+  () => form.roleKey,
+  (role) => {
+    if (role === 'enduser') {
+      form.enterpriseName = ''
+      form.creditCode = ''
+      form.contactPerson = ''
+      form.email = ''
+    }
+    if (role !== 'supplier') {
+      licenseFileList.value = []
+      certFileList.value = []
+    }
+  }
+)
 </script>
 
 <style scoped lang="scss">

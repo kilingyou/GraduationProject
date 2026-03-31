@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,6 +45,12 @@ public class GlobalExceptionHandler {
         String msg = e.getMessage() != null && !e.getMessage().isEmpty() ? e.getMessage() : "Access denied";
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Result.fail(Result.FORBIDDEN, msg));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Result<Void>> handleBadCredentials(BadCredentialsException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Result.fail(Result.UNAUTHORIZED, "用户名或密码错误"));
     }
 
     @ExceptionHandler(Exception.class)

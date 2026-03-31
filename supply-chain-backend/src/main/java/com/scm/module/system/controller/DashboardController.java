@@ -16,6 +16,7 @@ import com.scm.module.enduser.service.DecommissionService;
 import com.scm.module.enduser.service.RecallRequestService;
 import com.scm.module.enduser.service.UserProductService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
+import com.scm.module.manufacturer.entity.ProductionBatch;
 import com.scm.module.manufacturer.service.DeviceRecordService;
 import com.scm.module.manufacturer.service.ProductionBatchService;
 import com.scm.module.regulator.service.InspectionTaskService;
@@ -96,15 +97,15 @@ public class DashboardController {
                 .eq(ProductionRequest::getSupplierId, uid)
                 .eq(ProductionRequest::getStatus, "COMPLETED"));
         long docs = designDocumentService.count();
-        data.put("card1", Map.of("title", "生产订单", "value", orders, "desc", "已完成 " + completed + " 单"));
-        data.put("card2", Map.of("title", "完成率", "value", orders > 0 ? Math.round(completed * 1000.0 / orders) / 10.0 + "%" : "0%", "desc", "订单完成率"));
-        data.put("card3", Map.of("title", "设计文档", "value", docs, "desc", "累计上传"));
-        data.put("card4", Map.of("title", "在途订单", "value", orders - completed, "desc", "进行中"));
+        data.put("card1", card("生产订单", orders, "已完成 " + completed + " 单"));
+        data.put("card2", card("完成率", orders > 0 ? Math.round(completed * 1000.0 / orders) / 10.0 + "%" : "0%", "订单完成率"));
+        data.put("card3", card("设计文档", docs, "累计上传"));
+        data.put("card4", card("在途订单", orders - completed, "进行中"));
     }
 
     private void buildManufacturerStats(Map<String, Object> data, Long uid) {
-        long batches = productionBatchService.count(new LambdaQueryWrapper<com.scm.module.manufacturer.entity.ProductionBatch>()
-                .eq(com.scm.module.manufacturer.entity.ProductionBatch::getManufacturerId, uid));
+        long batches = productionBatchService.count(new LambdaQueryWrapper<ProductionBatch>()
+                .eq(ProductionBatch::getManufacturerId, uid));
         long devices = deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
                 .eq(DeviceRecord::getManufacturerId, uid));
         long qcPass = deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
@@ -113,10 +114,10 @@ public class DashboardController {
         long onChain = deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
                 .eq(DeviceRecord::getManufacturerId, uid)
                 .eq(DeviceRecord::getChainRegistered, 1));
-        data.put("card1", Map.of("title", "生产批次", "value", batches, "desc", "累计批次"));
-        data.put("card2", Map.of("title", "设备总数", "value", devices, "desc", "已上链 " + onChain));
-        data.put("card3", Map.of("title", "质检通过率", "value", devices > 0 ? Math.round(qcPass * 1000.0 / devices) / 10.0 + "%" : "0%", "desc", "通过 " + qcPass + " 台"));
-        data.put("card4", Map.of("title", "上链率", "value", devices > 0 ? Math.round(onChain * 1000.0 / devices) / 10.0 + "%" : "0%", "desc", "区块链存证"));
+        data.put("card1", card("生产批次", batches, "累计批次"));
+        data.put("card2", card("设备总数", devices, "已上链 " + onChain));
+        data.put("card3", card("质检通过率", devices > 0 ? Math.round(qcPass * 1000.0 / devices) / 10.0 + "%" : "0%", "通过 " + qcPass + " 台"));
+        data.put("card4", card("上链率", devices > 0 ? Math.round(onChain * 1000.0 / devices) / 10.0 + "%" : "0%", "区块链存证"));
     }
 
     private void buildAssemblerStats(Map<String, Object> data, Long uid) {
@@ -130,10 +131,10 @@ public class DashboardController {
         long onChain = assemblyRecordService.count(new LambdaQueryWrapper<AssemblyRecord>()
                 .eq(AssemblyRecord::getAssemblerId, uid)
                 .eq(AssemblyRecord::getChainRegistered, 1));
-        data.put("card1", Map.of("title", "组装批次", "value", batches, "desc", "累计批次"));
-        data.put("card2", Map.of("title", "组装记录", "value", records, "desc", "已上链 " + onChain));
-        data.put("card3", Map.of("title", "质检通过率", "value", records > 0 ? Math.round(pass * 1000.0 / records) / 10.0 + "%" : "0%", "desc", "通过 " + pass + " 条"));
-        data.put("card4", Map.of("title", "部件消耗", "value", assemblyRecordService.sumEcidSlots(uid), "desc", "部件绑定总次数"));
+        data.put("card1", card("组装批次", batches, "累计批次"));
+        data.put("card2", card("组装记录", records, "已上链 " + onChain));
+        data.put("card3", card("质检通过率", records > 0 ? Math.round(pass * 1000.0 / records) / 10.0 + "%" : "0%", "通过 " + pass + " 条"));
+        data.put("card4", card("部件消耗", assemblyRecordService.sumEcidSlots(uid), "部件绑定总次数"));
     }
 
     private void buildDistributorStats(Map<String, Object> data, Long uid) {
@@ -147,10 +148,10 @@ public class DashboardController {
                 .eq(TransferEvent::getStatus, "IN_TRANSIT"));
         long sales = salesRecordService.count(new LambdaQueryWrapper<SalesRecord>()
                 .eq(SalesRecord::getSellerId, uid));
-        data.put("card1", Map.of("title", "发货批次", "value", sent, "desc", "累计发货"));
-        data.put("card2", Map.of("title", "已收货", "value", received, "desc", "确认收货"));
-        data.put("card3", Map.of("title", "在途", "value", inTransit, "desc", "运输中"));
-        data.put("card4", Map.of("title", "销售记录", "value", sales, "desc", "累计销售"));
+        data.put("card1", card("发货批次", sent, "累计发货"));
+        data.put("card2", card("已收货", received, "确认收货"));
+        data.put("card3", card("在途", inTransit, "运输中"));
+        data.put("card4", card("销售记录", sales, "累计销售"));
     }
 
     private void buildEnduserStats(Map<String, Object> data, Long uid) {
@@ -163,10 +164,10 @@ public class DashboardController {
         long pending = recallRequestService.count(new LambdaQueryWrapper<RecallRequest>()
                 .eq(RecallRequest::getUserId, uid)
                 .eq(RecallRequest::getStatus, "PENDING"));
-        data.put("card1", Map.of("title", "绑定产品", "value", bound, "desc", "我的产品"));
-        data.put("card2", Map.of("title", "报废登记", "value", decommissioned, "desc", "我的报废"));
-        data.put("card3", Map.of("title", "投诉反馈", "value", complaints, "desc", "待处理 " + pending + " 条"));
-        data.put("card4", Map.of("title", "溯源查询", "value", "∞", "desc", "随时可查"));
+        data.put("card1", card("绑定产品", bound, "我的产品"));
+        data.put("card2", card("报废登记", decommissioned, "我的报废"));
+        data.put("card3", card("投诉反馈", complaints, "待处理 " + pending + " 条"));
+        data.put("card4", card("溯源查询", "∞", "随时可查"));
     }
 
     private void buildRegulatorStats(Map<String, Object> data) {
@@ -174,9 +175,17 @@ public class DashboardController {
         long devices = deviceRecordService.count();
         long inspections = inspectionTaskService.count();
         long recalls = recallNoticeService.count();
-        data.put("card1", Map.of("title", "系统用户", "value", users, "desc", "所有注册用户"));
-        data.put("card2", Map.of("title", "设备总数", "value", devices, "desc", "全链路设备"));
-        data.put("card3", Map.of("title", "抽检任务", "value", inspections, "desc", "累计任务"));
-        data.put("card4", Map.of("title", "召回通知", "value", recalls, "desc", "累计发布"));
+        data.put("card1", card("系统用户", users, "所有注册用户"));
+        data.put("card2", card("设备总数", devices, "全链路设备"));
+        data.put("card3", card("抽检任务", inspections, "累计任务"));
+        data.put("card4", card("召回通知", recalls, "累计发布"));
+    }
+
+    private static Map<String, Object> card(String title, Object value, String desc) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("title", title);
+        m.put("value", value);
+        m.put("desc", desc);
+        return m;
     }
 }

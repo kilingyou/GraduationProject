@@ -21,7 +21,7 @@
               <el-icon><HomeFilled /></el-icon>
               <span>首页</span>
             </el-menu-item>
-            <template v-for="top in userStore.menus" :key="top.id || top.path">
+            <template v-for="top in visibleApiMenus" :key="top.id || top.path">
               <el-sub-menu
                 v-if="top.children && top.children.length > 0"
                 :index="top.path || String(top.id)"
@@ -102,6 +102,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item @click="$router.push('/dashboard')">首页</el-dropdown-item>
+                <el-dropdown-item @click="handleSwitchAccount">切换账户</el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -132,6 +133,7 @@ const userStore = useUserStore()
 const isCollapse = ref(false)
 
 const roleLabels = {
+  admin: '系统管理员',
   supplier: '供应商',
   manufacturer: '制造商',
   assembler: '组装商',
@@ -144,6 +146,11 @@ const roleKey = computed(() => userStore.userInfo?.roleKey || '')
 const roleLabel = computed(() => roleLabels[roleKey.value] || roleKey.value)
 
 const useApiMenus = computed(() => Array.isArray(userStore.menus) && userStore.menus.length > 0)
+const visibleApiMenus = computed(() => {
+  const menus = Array.isArray(userStore.menus) ? userStore.menus : []
+  if (roleKey.value === 'admin') return menus
+  return menus.filter(top => top?.path !== '/system')
+})
 
 function joinPath(base, child) {
   const a = (base || '').toString()
@@ -172,6 +179,11 @@ const activeMenu = computed(() => route.path)
 const breadcrumbs = computed(() => route.matched.filter(item => item.meta?.title))
 
 function handleLogout() {
+  userStore.logout()
+  router.push('/login')
+}
+
+function handleSwitchAccount() {
   userStore.logout()
   router.push('/login')
 }

@@ -485,6 +485,7 @@ CREATE TABLE bus_ipfs_file (
 
 -- 初始化角色
 INSERT INTO sys_role (role_key, role_name, sort_order) VALUES
+('admin',        '系统管理员',    0),
 ('supplier',     '供应商',        1),
 ('manufacturer', '制造商',        2),
 ('assembler',    '组装商',        3),
@@ -496,7 +497,12 @@ INSERT INTO sys_role (role_key, role_name, sort_order) VALUES
 INSERT INTO sys_user (username, password, enterprise_name, status) VALUES
 ('admin', '$2a$10$EqKcp1WFKVQISheBxnGRhO7VlCNBEkMsEOoKbGSifGbSMEr3lsvCW', '系统管理员', 1);
 
-INSERT INTO sys_user_role (user_id, role_id) VALUES (1, 5);
+INSERT INTO sys_user_role (user_id, role_id)
+SELECT u.id, r.id
+FROM sys_user u
+JOIN sys_role r ON r.role_key = 'admin'
+WHERE u.username = 'admin'
+LIMIT 1;
 
 -- 初始化菜单
 INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, icon, sort_order) VALUES
@@ -548,29 +554,54 @@ INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, i
 (29, '审计日志', '/regulator/log', 'regulator/log/index', 'regulator:log:list', 'C', 'Notebook', 4);
 
 -- 角色-菜单分配
+-- 系统管理员: 全部菜单
+INSERT INTO sys_role_menu (role_id, menu_id)
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m
+WHERE r.role_key = 'admin';
+
 -- 供应商: 系统管理(部分) + 供应商管理
 INSERT INTO sys_role_menu (role_id, menu_id)
-SELECT 1, id FROM sys_menu WHERE id IN (1,2,5, 6,7,8,9,10);
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.id IN (1,2,5,6,7,8,9,10)
+WHERE r.role_key = 'supplier';
 
 -- 制造商: 系统管理(部分) + 制造商管理
 INSERT INTO sys_role_menu (role_id, menu_id)
-SELECT 2, id FROM sys_menu WHERE id IN (1,2,5, 11,12,13,14,15);
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.id IN (1,2,5,11,12,13,14,15)
+WHERE r.role_key = 'manufacturer';
 
 -- 组装商
 INSERT INTO sys_role_menu (role_id, menu_id)
-SELECT 3, id FROM sys_menu WHERE id IN (1,2,5, 16,17,18,19,20);
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.id IN (1,2,5,16,17,18,19,20)
+WHERE r.role_key = 'assembler';
 
 -- 分销商
 INSERT INTO sys_role_menu (role_id, menu_id)
-SELECT 4, id FROM sys_menu WHERE id IN (1,2,5, 21,22,23,24);
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.id IN (1,2,5,21,22,23,24)
+WHERE r.role_key = 'distributor';
 
 -- 监管机构: 全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)
-SELECT 5, id FROM sys_menu;
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m
+WHERE r.role_key = 'regulator';
 
 -- 终端用户
 INSERT INTO sys_role_menu (role_id, menu_id)
-SELECT 6, id FROM sys_menu WHERE id IN (25,26,27,28);
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.id IN (25,26,27,28)
+WHERE r.role_key = 'enduser';
 
 -- 扩展：产品绑定、串货监控（亦见 db/patch-menus-feature-extension.sql，已建库可单独重复执行）
 INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, icon, sort_order)
