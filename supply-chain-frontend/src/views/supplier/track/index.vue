@@ -18,7 +18,7 @@
       </div>
     </div>
 
-    <el-table v-loading="loading" :data="tableData" border stripe>
+    <el-table v-loading="loading" :data="tableData" border stripe @expand-change="onExpandChange">
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="expand-content">
@@ -193,6 +193,12 @@ async function fetchList() {
 function handleSearch() {
   queryParams.pageNum = 1
   fetchList()
+}
+
+function onExpandChange(row, expanded) {
+  if (expanded.length && expanded.includes(row)) {
+    handleExpand(row)
+  }
 }
 
 async function handleExpand(row) {

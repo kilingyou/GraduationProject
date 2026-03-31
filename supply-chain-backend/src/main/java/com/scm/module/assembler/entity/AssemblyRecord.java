@@ -40,6 +40,8 @@ public class AssemblyRecord {
 
     private String txHash;
 
+    private String assemblyTxHash;
+
     private Integer chainRegistered;
 
     private LocalDateTime assemblyTime;

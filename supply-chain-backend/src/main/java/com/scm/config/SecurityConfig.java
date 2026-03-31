@@ -45,7 +45,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .formLogin().disable()
                 .authorizeRequests()
                 .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .antMatchers("/api/auth/**", "/api/public/**").permitAll()
+                .antMatchers("/api/auth/**", "/api/public/**", "/api/debug/fisco/health", "/api/debug/fisco/block-number", "/api/debug/fisco/tx/**").permitAll()
                 .anyRequest().authenticated()
                 .and()
                 .addFilterBefore(publicTraceRateLimitFilter, UsernamePasswordAuthenticationFilter.class)

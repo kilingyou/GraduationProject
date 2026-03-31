@@ -26,6 +26,8 @@ public class ProductionBatch {
 
     private String status;
 
+    private String txHash;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

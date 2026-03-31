@@ -158,7 +158,7 @@ function resetCreate() {
 
 async function submitCreate() {
   if (!createFormRef.value) return
-  await createFormRef.value.validate()
+  try { await createFormRef.value.validate() } catch { return }
 
   createSubmitting.value = true
   try {
@@ -195,7 +195,7 @@ function handleReportFileChange(_file, fileList) {
 
 async function submitResult() {
   if (!resultFormRef.value) return
-  await resultFormRef.value.validate()
+  try { await resultFormRef.value.validate() } catch { return }
   if (!currentResultId.value) return
   const first = reportFiles.value?.[0]
   if (!first?.raw) {

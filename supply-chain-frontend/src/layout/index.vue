@@ -157,7 +157,14 @@ function joinPath(base, child) {
 }
 
 const menuRoutes = computed(() => {
-  return constantRoutes.filter(r => r.path !== '/login' && r.path !== '/register' && r.path !== '/trace' && r.children)
+  const role = roleKey.value
+  return constantRoutes.filter(r => {
+    if (r.path === '/login' || r.path === '/register' || r.path === '/trace') return false
+    if (!r.children) return false
+    const allowed = r.meta?.roles
+    if (!allowed) return true
+    return role === 'admin' || allowed.includes(role)
+  })
 })
 
 const activeMenu = computed(() => route.path)

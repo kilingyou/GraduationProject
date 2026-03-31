@@ -132,6 +132,8 @@ public class AssemblyRecordServiceImpl
                 .setStatus("ASSEMBLED")
                 .setChainRegistered(0)
                 .setAssemblyTime(LocalDateTime.now());
+        String anchorPayload = sn + "|" + ecidJson + "|" + assemblerId;
+        record.setAssemblyTxHash(blockchainAnchorService.anchor("ASSEMBLY_CREATE", HashUtil.sha256Hex(anchorPayload)));
         save(record);
 
         deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()

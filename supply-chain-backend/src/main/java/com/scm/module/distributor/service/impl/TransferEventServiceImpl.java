@@ -141,6 +141,10 @@ public class TransferEventServiceImpl
             }
             te.setStatus("RECEIVED");
             te.setActualArrival(now);
+            String recvPayload = te.getSn() + "|" + te.getTrackingNumber() + "|"
+                    + te.getSenderId() + "|" + receiverId + "|RECEIVED|" + now;
+            te.setReceiveTxHash(blockchainAnchorService.anchor(
+                    "TRANSFER_RECEIVE", HashUtil.sha256Hex(recvPayload)));
             updateById(te);
             ar.setCurrentHolderId(receiverId);
             ar.setStatus("IN_STOCK");

@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.itextpdf.text.Document;
-import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.*;
+import com.itextpdf.text.pdf.BaseFont;
+import com.itextpdf.text.pdf.PdfPCell;
+import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
@@ -213,22 +215,156 @@ public class RecallController {
         return (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 
+    @SuppressWarnings("unchecked")
     private byte[] renderEvidencePdf(String sn, Map<String, Object> trace) {
         try {
+            BaseFont bfChinese = BaseFont.createFont("STSong-Light", "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
+            Font titleFont = new Font(bfChinese, 18, Font.BOLD);
+            Font h2Font = new Font(bfChinese, 14, Font.BOLD, new BaseColor(64, 158, 255));
+            Font bodyFont = new Font(bfChinese, 10, Font.NORMAL);
+            Font boldFont = new Font(bfChinese, 10, Font.BOLD);
+            Font smallFont = new Font(bfChinese, 8, Font.NORMAL, BaseColor.GRAY);
+
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            Document document = new Document();
-            PdfWriter.getInstance(document, out);
-            document.open();
-            document.add(new Paragraph("Supply Chain Evidence Package"));
-            document.add(new Paragraph("SN: " + sn));
-            document.add(new Paragraph("Generated At: " + java.time.LocalDateTime.now()));
-            document.add(new Paragraph(" "));
-            document.add(new Paragraph("Trace Snapshot (JSON):"));
-            document.add(new Paragraph(objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(trace)));
-            document.close();
+            Document doc = new Document(PageSize.A4, 40, 40, 50, 40);
+            PdfWriter.getInstance(doc, out);
+            doc.open();
+
+            Paragraph title = new Paragraph("供应链溯源证据包", titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            doc.add(title);
+            doc.add(new Paragraph(" "));
+
+            PdfPTable infoTable = newTable(2, new float[]{30, 70});
+            addKvRow(infoTable, "产品SN", sn, boldFont, bodyFont);
+            addKvRow(infoTable, "生成时间", java.time.LocalDateTime.now().toString(), boldFont, bodyFont);
+            addKvRow(infoTable, "装配状态", str(trace.get("status")), boldFont, bodyFont);
+            addKvRow(infoTable, "固件版本", str(trace.get("firmwareVersion")), boldFont, bodyFont);
+            doc.add(infoTable);
+            doc.add(new Paragraph(" "));
+
+            List<?> warnings = trace.get("warnings") instanceof List ? (List<?>) trace.get("warnings") : null;
+            if (warnings != null && !warnings.isEmpty()) {
+                doc.add(new Paragraph("风险提示", h2Font));
+                for (Object w : warnings) {
+                    Paragraph pw = new Paragraph("• " + w, bodyFont);
+                    pw.setIndentationLeft(20);
+                    doc.add(pw);
+                }
+                doc.add(new Paragraph(" "));
+            }
+
+            List<?> deviceTraces = trace.get("deviceTraces") instanceof List ? (List<?>) trace.get("deviceTraces") : null;
+            if (deviceTraces != null && !deviceTraces.isEmpty()) {
+                doc.add(new Paragraph("部件溯源", h2Font));
+                PdfPTable devTable = newTable(5, new float[]{22, 14, 14, 14, 36});
+                addHeaderRow(devTable, new String[]{"ECID", "设备类型", "批次", "状态", "上链TxHash"}, boldFont);
+                for (Object dt : deviceTraces) {
+                    if (!(dt instanceof Map)) continue;
+                    Map<String, Object> dtm = (Map<String, Object>) dt;
+                    Map<String, Object> dr = dtm.get("deviceRecord") instanceof Map ? (Map<String, Object>) dtm.get("deviceRecord") : null;
+                    addRow(devTable, new String[]{
+                            str(dtm.get("ecid")),
+                            dr != null ? str(dr.get("deviceType")) : "-",
+                            dr != null ? str(dr.get("batchId")) : "-",
+                            dr != null ? str(dr.get("status")) : "-",
+                            dr != null ? str(dr.get("txHash")) : "-"
+                    }, bodyFont);
+                }
+                doc.add(devTable);
+                doc.add(new Paragraph(" "));
+            }
+
+            List<?> transfers = trace.get("transferEvents") instanceof List ? (List<?>) trace.get("transferEvents") : null;
+            if (transfers != null && !transfers.isEmpty()) {
+                doc.add(new Paragraph("物流流转记录", h2Font));
+                PdfPTable tfTable = newTable(5, new float[]{18, 18, 18, 18, 28});
+                addHeaderRow(tfTable, new String[]{"物流单号", "物流公司", "发货时间", "状态", "上链TxHash"}, boldFont);
+                for (Object t : transfers) {
+                    if (!(t instanceof Map)) {
+                        try {
+                            Map<String, Object> tm = objectMapper.convertValue(t, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                            addRow(tfTable, new String[]{
+                                    str(tm.get("trackingNumber")), str(tm.get("logisticsCompany")),
+                                    str(tm.get("shipTime")), str(tm.get("status")), str(tm.get("txHash"))
+                            }, bodyFont);
+                        } catch (Exception ignore) {}
+                        continue;
+                    }
+                    Map<String, Object> tm = (Map<String, Object>) t;
+                    addRow(tfTable, new String[]{
+                            str(tm.get("trackingNumber")), str(tm.get("logisticsCompany")),
+                            str(tm.get("shipTime")), str(tm.get("status")), str(tm.get("txHash"))
+                    }, bodyFont);
+                }
+                doc.add(tfTable);
+                doc.add(new Paragraph(" "));
+            }
+
+            Object sale = trace.get("salesRecord");
+            if (sale != null) {
+                doc.add(new Paragraph("销售信息", h2Font));
+                Map<String, Object> sm;
+                if (sale instanceof Map) {
+                    sm = (Map<String, Object>) sale;
+                } else {
+                    sm = objectMapper.convertValue(sale, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                }
+                PdfPTable saleTable = newTable(2, new float[]{30, 70});
+                addKvRow(saleTable, "销售时间", str(sm.get("saleTime")), boldFont, bodyFont);
+                addKvRow(saleTable, "上链TxHash", str(sm.get("txHash")), boldFont, bodyFont);
+                doc.add(saleTable);
+                doc.add(new Paragraph(" "));
+            }
+
+            Paragraph footer = new Paragraph("本证据包由供应链管理系统自动生成，数据来源于区块链及IPFS存储。", smallFont);
+            footer.setAlignment(Element.ALIGN_CENTER);
+            doc.add(footer);
+
+            doc.close();
             return out.toByteArray();
         } catch (Exception e) {
             throw new RuntimeException("PDF export failed: " + e.getMessage(), e);
         }
+    }
+
+    private PdfPTable newTable(int cols, float[] widths) throws DocumentException {
+        PdfPTable table = new PdfPTable(cols);
+        table.setWidthPercentage(100);
+        table.setWidths(widths);
+        table.setSpacingBefore(6);
+        return table;
+    }
+
+    private void addHeaderRow(PdfPTable table, String[] headers, Font font) {
+        BaseColor headerBg = new BaseColor(240, 242, 245);
+        for (String h : headers) {
+            PdfPCell cell = new PdfPCell(new Phrase(h, font));
+            cell.setBackgroundColor(headerBg);
+            cell.setPadding(6);
+            table.addCell(cell);
+        }
+    }
+
+    private void addRow(PdfPTable table, String[] values, Font font) {
+        for (String v : values) {
+            PdfPCell cell = new PdfPCell(new Phrase(v != null ? v : "-", font));
+            cell.setPadding(5);
+            table.addCell(cell);
+        }
+    }
+
+    private void addKvRow(PdfPTable table, String key, String value, Font kFont, Font vFont) {
+        PdfPCell kc = new PdfPCell(new Phrase(key, kFont));
+        kc.setPadding(5);
+        kc.setBackgroundColor(new BaseColor(250, 250, 250));
+        table.addCell(kc);
+        PdfPCell vc = new PdfPCell(new Phrase(value != null ? value : "-", vFont));
+        vc.setPadding(5);
+        table.addCell(vc);
+    }
+
+    private String str(Object o) {
+        return o != null ? String.valueOf(o) : "-";
     }
 }

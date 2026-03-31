@@ -181,6 +181,10 @@ async function uploadReport() {
 async function handlePass() {
   const valid = await qcFormRef.value.validate().catch(() => false)
   if (!valid) return
+  if (!qcForm.fileList.length) {
+    ElMessage.warning('请先上传质检报告文件')
+    return
+  }
 
   await ElMessageBox.confirm('确认标记为合格并上链？此操作不可撤销。', '质检确认', { type: 'warning' })
 

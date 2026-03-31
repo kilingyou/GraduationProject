@@ -53,8 +53,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useUserStore } from '@/store/user'
+import { getDashboardStats } from '@/api/auth'
 
 const userStore = useUserStore()
 
@@ -75,12 +76,38 @@ const today = computed(() => {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 })
 
-const statCards = [
-  { title: '生产订单', value: 128, icon: 'Tickets', color: '#409eff', bgColor: '#ecf5ff', desc: '本月新增 23 单' },
-  { title: '产品总数', value: 1536, icon: 'GoodsFilled', color: '#67c23a', bgColor: '#f0f9eb', desc: '较上月增长 12%' },
-  { title: '质检通过率', value: '98.5%', icon: 'Checked', color: '#e6a23c', bgColor: '#fdf6ec', desc: '整体质量优良' },
-  { title: '活跃用户', value: 56, icon: 'UserFilled', color: '#f56c6c', bgColor: '#fef0f0', desc: '当前在线 12 人' }
-]
+const icons = ['Tickets', 'GoodsFilled', 'Checked', 'UserFilled']
+const colors = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c']
+const bgColors = ['#ecf5ff', '#f0f9eb', '#fdf6ec', '#fef0f0']
+
+const statCards = ref([
+  { title: '-', value: '-', icon: icons[0], color: colors[0], bgColor: bgColors[0], desc: '加载中...' },
+  { title: '-', value: '-', icon: icons[1], color: colors[1], bgColor: bgColors[1], desc: '加载中...' },
+  { title: '-', value: '-', icon: icons[2], color: colors[2], bgColor: bgColors[2], desc: '加载中...' },
+  { title: '-', value: '-', icon: icons[3], color: colors[3], bgColor: bgColors[3], desc: '加载中...' }
+])
+
+onMounted(async () => {
+  try {
+    const res = await getDashboardStats()
+    const d = res.data
+    if (d) {
+      const keys = ['card1', 'card2', 'card3', 'card4']
+      keys.forEach((k, i) => {
+        if (d[k]) {
+          statCards.value[i] = {
+            title: d[k].title || '-',
+            value: d[k].value ?? '-',
+            icon: icons[i],
+            color: colors[i],
+            bgColor: bgColors[i],
+            desc: d[k].desc || ''
+          }
+        }
+      })
+    }
+  } catch (_) { /* keep placeholder values */ }
+})
 
 const roleActions = {
   supplier: [

@@ -4,10 +4,6 @@ export function getUserList(params) {
   return request({ url: '/system/user/list', method: 'get', params })
 }
 
-export function getUserDetail(id) {
-  return request({ url: `/system/user/${id}`, method: 'get' })
-}
-
 export function updateUser(id, data) {
   return request({ url: `/system/user/${id}`, method: 'put', data })
 }

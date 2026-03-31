@@ -21,4 +21,6 @@ public class UserProduct {
     private LocalDateTime bindTime;
 
     private String verifyStatus;
+
+    private String txHash;
 }

@@ -83,6 +83,8 @@ public class ProductionBatchServiceImpl
                 .setPlannedQty(qty)
                 .setCompletedQty(0)
                 .setStatus("CREATED");
+        String payload = batchId + "|" + orderId + "|" + manufacturerId + "|" + qty;
+        batch.setTxHash(blockchainAnchorService.anchor("PRODUCTION_BATCH_CREATE", HashUtil.sha256Hex(payload)));
         save(batch);
         return batch;
     }

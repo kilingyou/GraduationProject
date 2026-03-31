@@ -20,10 +20,6 @@ export function getInspectionList(params) {
   return request({ url: '/regulator/inspection/list', method: 'get', params })
 }
 
-export function submitInspectionResult(id, data) {
-  return request({ url: `/regulator/inspection/${id}/result`, method: 'put', data })
-}
-
 export function submitInspectionResultMultipart(id, formData) {
   return request({ url: `/regulator/inspection/${id}/result`, method: 'put', data: formData })
 }

@@ -36,6 +36,8 @@ public class TransferEvent {
 
     private String txHash;
 
+    private String receiveTxHash;
+
     private String status;
 
     @TableField(fill = FieldFill.INSERT)

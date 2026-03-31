@@ -72,6 +72,8 @@ public class QualityController {
         }
         LoginUser user = currentUser();
         List<String> ecids = resolveEcids(targetType, targetId, user.getUserId());
+        String anchorPayload = String.join(",", ecids) + "|QC_PASS";
+        blockchainAnchorService.anchor("MFG_QC_PASS", HashUtil.sha256Hex(anchorPayload));
         boolean updated = deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()
                 .in(DeviceRecord::getEcid, ecids)
                 .set(DeviceRecord::getStatus, "QC_PASS"));

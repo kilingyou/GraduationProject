@@ -11,3 +11,7 @@ export function register(data) {
 export function getUserInfo() {
   return request({ url: '/auth/info', method: 'get' })
 }
+
+export function getDashboardStats() {
+  return request({ url: '/dashboard/stats', method: 'get' })
+}

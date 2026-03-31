@@ -217,6 +217,7 @@ CREATE TABLE bus_production_batch (
     planned_qty     INT          COMMENT '计划数量',
     completed_qty   INT          DEFAULT 0 COMMENT '已完成数量',
     status          VARCHAR(20)  DEFAULT 'CREATED' COMMENT 'CREATED/IN_PROGRESS/COMPLETED',
+    tx_hash         VARCHAR(128) COMMENT '上链交易哈希',
     create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_order_id (order_id),
@@ -293,6 +294,7 @@ CREATE TABLE bus_assembly_batch (
     planned_qty   INT,
     completed_qty INT          DEFAULT 0,
     status        VARCHAR(20)  DEFAULT 'CREATED',
+    tx_hash       VARCHAR(128) COMMENT '上链交易哈希',
     create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_assembler_id (assembler_id)
@@ -313,6 +315,7 @@ CREATE TABLE bus_assembly_record (
     assembler_sign    VARCHAR(500) COMMENT '组装商签名',
     status            VARCHAR(30)  DEFAULT 'ASSEMBLED' COMMENT 'ASSEMBLED/ON_CHAIN/IN_STOCK/IN_TRANSIT/SOLD/RECALLING/DECOMMISSIONED',
     tx_hash           VARCHAR(128),
+    assembly_tx_hash  VARCHAR(128) COMMENT '组装创建上链哈希',
     chain_registered  TINYINT      DEFAULT 0,
     assembly_time     DATETIME,
     create_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -340,6 +343,7 @@ CREATE TABLE bus_transfer_event (
     estimated_arrival DATETIME,
     actual_arrival   DATETIME,
     tx_hash          VARCHAR(128),
+    receive_tx_hash  VARCHAR(128) COMMENT '收货上链交易哈希',
     status           VARCHAR(20)  DEFAULT 'PENDING' COMMENT 'PENDING/IN_TRANSIT/RECEIVED/ANOMALY',
     create_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -378,6 +382,7 @@ CREATE TABLE bus_user_product (
     sn            VARCHAR(100) NOT NULL,
     bind_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     verify_status VARCHAR(20)  DEFAULT 'PENDING' COMMENT 'PENDING/VERIFIED',
+    tx_hash       VARCHAR(128) COMMENT '绑定上链交易哈希',
     UNIQUE KEY uk_user_sn (user_id, sn),
     INDEX idx_sn (sn)
 ) COMMENT '用户产品绑定表';

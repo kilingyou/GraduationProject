@@ -136,6 +136,15 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
         return resp.getTransactionReceipt().getTransactionHash();
     }
 
+    @Override
+    public String generateBlockchainAddress() {
+        if (!available) {
+            return BlockchainAnchorService.super.generateBlockchainAddress();
+        }
+        CryptoKeyPair newKeyPair = client.getCryptoSuite().createKeyPair();
+        return newKeyPair.getAddress();
+    }
+
     public boolean isAvailable() {
         return available;
     }

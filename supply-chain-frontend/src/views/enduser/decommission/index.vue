@@ -153,7 +153,7 @@ function resetBindForm() {
 
 async function submitDecommission() {
   if (!formRef.value) return
-  await formRef.value.validate()
+  try { await formRef.value.validate() } catch { return }
 
   submitting.value = true
   try {
@@ -187,13 +187,17 @@ async function fetchList() {
 }
 
 async function fetchBoundProducts() {
-  const res = await getUserProductList()
-  boundProducts.value = res.data || []
+  try {
+    const res = await getUserProductList()
+    boundProducts.value = res.data || []
+  } catch {
+    ElMessage.error('获取已绑定产品失败')
+  }
 }
 
 async function submitBind() {
   if (!bindFormRef.value) return
-  await bindFormRef.value.validate()
+  try { await bindFormRef.value.validate() } catch { return }
   binding.value = true
   try {
     await bindUserProduct({

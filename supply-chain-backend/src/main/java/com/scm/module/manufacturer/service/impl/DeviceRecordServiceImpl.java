@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
+import com.scm.common.util.HashUtil;
+import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.module.manufacturer.dto.DeviceRegisterRequest;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.ProductionBatch;
@@ -31,6 +33,7 @@ public class DeviceRecordServiceImpl
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final ProductionBatchService productionBatchService;
+    private final BlockchainAnchorService blockchainAnchorService;
 
     @Override
     public List<String> generateEcids(String batchId, String orderId, Long manufacturerId, Integer qty, String deviceType) {
@@ -93,11 +96,15 @@ public class DeviceRecordServiceImpl
 
     @Override
     public boolean registerOnChain(List<Long> ids) {
-        // TODO: integrate with blockchain SDK to register devices on chain
         List<DeviceRecord> records = listByIds(ids);
         for (DeviceRecord record : records) {
+            String payload = record.getEcid() + "|" + record.getOrderId() + "|"
+                    + record.getBatchId() + "|" + record.getManufacturerId();
+            String txHash = blockchainAnchorService.anchor(
+                    "DEVICE_REGISTER", HashUtil.sha256Hex(payload));
             record.setChainRegistered(1);
-            record.setTxHash("0x_stub_" + record.getEcid());
+            record.setTxHash(txHash);
+            record.setStatus("QC_PASS");
         }
         return updateBatchById(records);
     }

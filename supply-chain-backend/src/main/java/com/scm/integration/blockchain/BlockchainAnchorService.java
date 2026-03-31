@@ -11,4 +11,13 @@ public interface BlockchainAnchorService {
      * @return transaction hash (stub: deterministic pseudo hash)
      */
     String anchor(String bizType, String payloadHash);
+
+    /**
+     * Generate a fresh blockchain account address.
+     * Real implementations derive from the chain's crypto suite;
+     * stubs return a deterministic pseudo address.
+     */
+    default String generateBlockchainAddress() {
+        return "0x" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 40);
+    }
 }

@@ -105,6 +105,8 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         if (!Constants.PENDING_ACCEPTANCE.equals(order.getStatus())) {
             throw new BusinessException("仅待接单状态的订单可撤销");
         }
+        String payload = order.getOrderId() + "|" + supplierId + "|CANCELLED";
+        blockchainAnchorService.anchor("PRODUCTION_ORDER_CANCEL", HashUtil.sha256Hex(payload));
         update(new LambdaUpdateWrapper<ProductionRequest>()
                 .eq(ProductionRequest::getId, orderDbId)
                 .set(ProductionRequest::getStatus, Constants.CANCELLED));

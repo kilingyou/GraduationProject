@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
+import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.module.distributor.entity.SalesRecord;
 import com.scm.module.distributor.service.SalesRecordService;
 import com.scm.module.enduser.entity.UserProduct;
@@ -21,6 +22,7 @@ public class UserProductServiceImpl extends ServiceImpl<UserProductMapper, UserP
         implements UserProductService {
 
     private final SalesRecordService salesRecordService;
+    private final BlockchainAnchorService blockchainAnchorService;
 
     @Override
     public UserProduct bindProduct(Long userId, String sn, String customerName, String customerPhone) {
@@ -53,6 +55,8 @@ public class UserProductServiceImpl extends ServiceImpl<UserProductMapper, UserP
         bind.setUserId(userId);
         bind.setSn(normalizedSn);
         bind.setVerifyStatus("VERIFIED");
+        String payload = userId + "|" + normalizedSn + "|" + computed;
+        bind.setTxHash(blockchainAnchorService.anchor("USER_PRODUCT_BIND", HashUtil.sha256Hex(payload)));
         save(bind);
         return bind;
     }

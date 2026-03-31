@@ -25,7 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor
@@ -55,11 +55,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setStatus(1);
         user.setDelFlag(0);
-        // 占位链上地址：0x + 40 位 hex（单个 UUID 去横线仅 32 位，不能直接 substring(0,40)）
-        String hex40 = (UUID.randomUUID().toString() + UUID.randomUUID().toString())
-                .replace("-", "")
-                .substring(0, 40);
-        user.setBlockchainAddr("0x" + hex40);
+        user.setBlockchainAddr(blockchainAnchorService.generateBlockchainAddress());
         baseMapper.insert(user);
 
         if ("supplier".equalsIgnoreCase(roleKey)) {

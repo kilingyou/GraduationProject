@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.scm.common.util.HashUtil;
+import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.module.assembler.entity.AssemblyBatch;
 import com.scm.module.assembler.mapper.AssemblyBatchMapper;
 import com.scm.module.assembler.service.AssemblyBatchService;
@@ -22,6 +24,7 @@ public class AssemblyBatchServiceImpl
         implements AssemblyBatchService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.BASIC_ISO_DATE;
+    private final BlockchainAnchorService blockchainAnchorService;
 
     @Override
     public AssemblyBatch createBatch(AssemblyBatch batch) {
@@ -35,6 +38,8 @@ public class AssemblyBatchServiceImpl
         if (batch.getStatus() == null) {
             batch.setStatus("CREATED");
         }
+        String payload = batch.getBatchNo() + "|" + batch.getAssemblerId();
+        batch.setTxHash(blockchainAnchorService.anchor("ASSEMBLY_BATCH_CREATE", HashUtil.sha256Hex(payload)));
         save(batch);
         return batch;
     }
