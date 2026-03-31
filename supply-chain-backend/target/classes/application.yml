@@ -63,9 +63,9 @@ logging:
 # Integration toggles (production: replace stub / in-memory with real IPFS + FISCO BCOS clients)
 scm:
   ipfs:
-    mode: in-memory
-    # 浏览器下载设计文档/协议原件时拼接 CID（生产环境改为自有网关）
-    gateway: https://ipfs.io/ipfs/
+    mode: node
+    api-url: http://127.0.0.1:5001
+    gateway: http://127.0.0.1:8080/ipfs/
   blockchain:
     mode: stub
   scheduler:
