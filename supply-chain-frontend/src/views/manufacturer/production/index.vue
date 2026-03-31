@@ -52,9 +52,17 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" align="center">
+            <el-table-column label="操作" width="220" align="center">
               <template #default="{ row }">
                 <el-button type="primary" link @click="goToEcidTab(row)">管理ECID</el-button>
+                <el-button
+                  v-if="row.status !== 'COMPLETED'"
+                  type="success"
+                  link
+                  @click="handleBatchComplete(row)"
+                >
+                  批次完工
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -145,17 +153,17 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="onChain" label="是否上链" width="100" align="center">
+            <el-table-column prop="chainRegistered" label="是否上链" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.onChain ? 'success' : 'info'" effect="plain" size="small">
-                  {{ row.onChain ? '已上链' : '未上链' }}
+                <el-tag :type="row.chainRegistered === 1 ? 'success' : 'info'" effect="plain" size="small">
+                  {{ row.chainRegistered === 1 ? '已上链' : '未上链' }}
                 </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="120" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button
-                  v-if="!row.onChain"
+                  v-if="row.chainRegistered !== 1"
                   type="primary"
                   link
                   size="small"
@@ -198,9 +206,12 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrderList,
-  createBatch, getBatchList,
-  generateEcids, getEcidList, exportEcids, registerEcids
+  createBatch,
+  completeProductionBatch,
+  getBatchList,
+  generateEcids, getEcidList, registerEcids
 } from '@/api/manufacturer'
+import { useUserStore } from '@/store/user'
 
 const activeTab = ref('batch')
 const activeStep = computed(() => {
@@ -213,7 +224,11 @@ const orderOptions = ref([])
 
 async function fetchOrderOptions() {
   try {
-    const { data } = await getOrderList({ page: 1, pageSize: 200, status: 'ACCEPTED' })
+    const { data } = await getOrderList({
+      scope: 'mine',
+      page: 1,
+      pageSize: 200
+    })
     orderOptions.value = data.records ?? data.list ?? []
   } catch { /* handled by interceptor */ }
 }
@@ -272,12 +287,33 @@ function goToEcidTab(row) {
   fetchEcids()
 }
 
+async function handleBatchComplete(row) {
+  try {
+    await ElMessageBox.confirm(
+      '确认批次完工？要求：本批次全部 ECID 已链上注册且质检标记为合格。若本订单下所有批次均已完工，订单将自动变为「已完成」。',
+      '批次完工',
+      { type: 'warning' }
+    )
+    await completeProductionBatch(row.batchId)
+    ElMessage.success('批次已完工')
+    fetchBatches()
+    fetchOrderOptions()
+  } catch (e) {
+    if (e !== 'cancel') {
+      /* 业务异常由拦截器提示 */
+    }
+  }
+}
+
 // ================== ECID management ==================
 const ECID_STATUS = {
+  PRODUCED: { label: '已生成', type: 'info' },
   GENERATED: { label: '已生成', type: 'info' },
   REGISTERED: { label: '已注册', type: 'success' },
+  QC_PASS: { label: '质检通过', type: 'success' },
   QC_PASSED: { label: '质检通过', type: 'success' },
   QC_FAILED: { label: '质检不合格', type: 'danger' },
+  REJECTED: { label: '不合格作废', type: 'danger' },
   SHIPPED: { label: '已发货', type: '' }
 }
 const ecidStatusLabel = (s) => ECID_STATUS[s]?.label || s
@@ -304,7 +340,9 @@ const batchOptions = computed(() => batchList.value)
 async function fetchEcids() {
   ecidLoading.value = true
   try {
-    const { data } = await getEcidList(ecidQuery)
+    const params = { page: ecidQuery.page, pageSize: ecidQuery.pageSize }
+    if (ecidGenForm.batchId) params.batchId = ecidGenForm.batchId
+    const { data } = await getEcidList(params)
     ecidList.value = data.records ?? data.list ?? []
     ecidTotal.value = data.total ?? 0
   } catch { /* handled by interceptor */ } finally {
@@ -342,8 +380,8 @@ async function handleBulkRegister() {
   )
   registering.value = true
   try {
-    const ecids = selectedEcids.value.map(r => r.ecid)
-    await registerEcids({ ecids })
+    const ids = selectedEcids.value.map(r => r.id).filter(Boolean)
+    await registerEcids({ ids })
     ElMessage.success('批量注册成功')
     fetchEcids()
   } catch { /* handled by interceptor */ } finally {
@@ -355,7 +393,7 @@ async function handleSingleRegister(row) {
   await ElMessageBox.confirm(`确认将 ECID [${row.ecid}] 注册上链？`, '注册确认', { type: 'warning' })
   registering.value = true
   try {
-    await registerEcids({ ecids: [row.ecid] })
+    await registerEcids({ ids: [row.id] })
     ElMessage.success('注册成功')
     fetchEcids()
   } catch { /* handled by interceptor */ } finally {
@@ -363,19 +401,50 @@ async function handleSingleRegister(row) {
   }
 }
 
+async function downloadEcidCsv(batchId, ecidArr) {
+  const token = useUserStore().token
+  const params = new URLSearchParams()
+  if (batchId) params.set('batchId', batchId)
+  if (ecidArr && ecidArr.length) params.set('ecids', ecidArr.join(','))
+  const r = await fetch(`/api/manufacturer/production/ecid/export-file?${params}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
+  if (!r.ok) {
+    ElMessage.error('导出失败，请检查批次或登录状态')
+    return
+  }
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'ecid-export.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 async function handleExport() {
   try {
-    const ecids = selectedEcids.value.map(r => r.ecid)
-    await exportEcids({ ecids })
-    ElMessage.success('导出任务已提交')
-  } catch { /* handled by interceptor */ }
+    if (selectedEcids.value.length) {
+      await downloadEcidCsv(null, selectedEcids.value.map(r => r.ecid))
+    } else if (ecidGenForm.batchId) {
+      await downloadEcidCsv(ecidGenForm.batchId, null)
+    } else {
+      ElMessage.warning('请选择表格中的 ECID，或先在上方选择批次后导出整批')
+      return
+    }
+    ElMessage.success('已下载 CSV，可用于车间打码')
+  } catch {
+    ElMessage.error('导出失败')
+  }
 }
 
 async function handleSingleExport(row) {
   try {
-    await exportEcids({ ecids: [row.ecid] })
-    ElMessage.success('导出任务已提交')
-  } catch { /* handled by interceptor */ }
+    await downloadEcidCsv(null, [row.ecid])
+    ElMessage.success('已下载 CSV')
+  } catch {
+    ElMessage.error('导出失败')
+  }
 }
 
 onMounted(() => {

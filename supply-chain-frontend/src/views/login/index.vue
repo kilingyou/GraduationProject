@@ -19,6 +19,8 @@
         <el-form-item prop="username">
           <el-input
             v-model="loginForm.username"
+            name="username"
+            autocomplete="username"
             placeholder="请输入账号"
             :prefix-icon="User"
           />
@@ -27,6 +29,8 @@
         <el-form-item prop="password">
           <el-input
             v-model="loginForm.password"
+            name="password"
+            autocomplete="current-password"
             type="password"
             placeholder="请输入密码"
             show-password
@@ -57,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
@@ -84,7 +88,11 @@ const rules = {
 }
 
 async function handleLogin() {
-  const valid = await formRef.value.validate().catch(() => false)
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur()
+  }
+  await nextTick()
+  const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
   loading.value = true
@@ -92,7 +100,7 @@ async function handleLogin() {
     await userStore.doLogin(loginForm)
     ElMessage.success('登录成功')
     const redirect = route.query.redirect || '/dashboard'
-    router.push(redirect)
+    await router.replace(typeof redirect === 'string' ? redirect : '/dashboard')
   } catch (err) {
     ElMessage.error(err.response?.data?.message || err.message || '登录失败')
   } finally {

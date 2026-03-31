@@ -29,12 +29,12 @@
               <el-tag :type="batchStatusType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="createdAt" label="创建时间" min-width="180" />
+          <el-table-column prop="createTime" label="创建时间" min-width="180" />
         </el-table>
         <el-pagination
           class="mt-16"
-          v-model:current-page="batchPage.page"
-          v-model:page-size="batchPage.size"
+          v-model:current-page="batchPage.pageNum"
+          v-model:page-size="batchPage.pageSize"
           :total="batchPage.total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next"
@@ -45,6 +45,28 @@
 
       <!-- Tab: Assembly Records -->
       <el-tab-pane label="组装记录" name="record">
+        <el-form :inline="true" class="mb-16 filter-bar" @submit.prevent>
+          <el-form-item label="批次筛选">
+            <el-select
+              v-model="recordFilterBatchNo"
+              placeholder="全部批次"
+              clearable
+              filterable
+              style="width: 280px"
+              @change="onRecordFilterChange"
+            >
+              <el-option
+                v-for="b in batchList"
+                :key="b.batchNo"
+                :label="`${b.batchNo} (${b.productModel})`"
+                :value="b.batchNo"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button :loading="exportLoading" @click="handleExportRecords">导出 CSV</el-button>
+          </el-form-item>
+        </el-form>
         <el-card shadow="never" class="mb-16">
           <el-form :model="recordForm" :rules="recordRules" ref="recordFormRef" label-width="100px">
             <el-row :gutter="20">
@@ -54,7 +76,8 @@
                     <el-option
                       v-for="b in batchList"
                       :key="b.batchNo"
-                      :label="`${b.batchNo} (${b.productModel})`"
+                      :disabled="!isBatchOpenForAssembly(b)"
+                      :label="`${b.batchNo} (${b.productModel})${!isBatchOpenForAssembly(b) ? ' — 已满或未开放' : ''}`"
                       :value="b.batchNo"
                     />
                   </el-select>
@@ -63,6 +86,13 @@
               <el-col :span="12">
                 <el-form-item label="固件版本" prop="firmwareVersion">
                   <el-input v-model="recordForm.firmwareVersion" placeholder="例: v1.2.3" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="整机 SN" prop="sn">
+                  <el-input v-model="recordForm.sn" clearable placeholder="选填，不填则系统自动生成" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -94,7 +124,7 @@
 
         <el-table :data="recordList" v-loading="recordLoading" border stripe>
           <el-table-column prop="sn" label="SN" width="200" />
-          <el-table-column prop="batchNo" label="批次号" width="180" />
+          <el-table-column prop="assemblyBatchNo" label="批次号" width="200" />
           <el-table-column prop="ecidList" label="ECID列表" min-width="200">
             <template #default="{ row }">
               <el-tag v-for="e in (row.ecidList || [])" :key="e" size="small" class="ecid-tag">{{ e }}</el-tag>
@@ -108,17 +138,17 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="chainStatus" label="链上状态" width="100" align="center">
+          <el-table-column label="链上状态" width="100" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.chainStatus === 'ON_CHAIN' ? 'success' : 'warning'" size="small">
-                {{ row.chainStatus === 'ON_CHAIN' ? '已上链' : '未上链' }}
+              <el-tag :type="isOnChain(row) ? 'success' : 'warning'" size="small">
+                {{ isOnChain(row) ? '已上链' : '未上链' }}
               </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="120" align="center" fixed="right">
             <template #default="{ row }">
               <el-button
-                v-if="row.chainStatus !== 'ON_CHAIN'"
+                v-if="!isOnChain(row)"
                 type="primary"
                 size="small"
                 link
@@ -133,8 +163,8 @@
         </el-table>
         <el-pagination
           class="mt-16"
-          v-model:current-page="recordPage.page"
-          v-model:page-size="recordPage.size"
+          v-model:current-page="recordPage.pageNum"
+          v-model:page-size="recordPage.pageSize"
           :total="recordPage.total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next"
@@ -167,12 +197,12 @@ const batchRules = {
 const batchSubmitting = ref(false)
 const batchLoading = ref(false)
 const batchList = ref([])
-const batchPage = reactive({ page: 1, size: 10, total: 0 })
+const batchPage = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 
 async function loadBatches() {
   batchLoading.value = true
   try {
-    const res = await getAssemblyBatchList({ page: batchPage.page, size: batchPage.size })
+    const res = await getAssemblyBatchList({ pageNum: batchPage.pageNum, pageSize: batchPage.pageSize })
     batchList.value = res.data?.records || res.data?.list || []
     batchPage.total = res.data?.total || 0
   } catch (e) {
@@ -203,9 +233,17 @@ function batchStatusType(status) {
   return m[status] ?? 'info'
 }
 
+function isBatchOpenForAssembly(b) {
+  if (!b || b.status === 'COMPLETED' || b.status === 'CANCELLED') return false
+  const done = b.completedQty ?? 0
+  const plan = b.plannedQty
+  if (plan != null && done >= plan) return false
+  return true
+}
+
 // ---- Records ----
 const recordFormRef = ref()
-const recordForm = reactive({ batchNo: '', ecidList: [], firmwareVersion: '' })
+const recordForm = reactive({ batchNo: '', sn: '', ecidList: [], firmwareVersion: '' })
 const recordRules = {
   batchNo: [{ required: true, message: '请选择批次', trigger: 'change' }],
   ecidList: [{ required: true, type: 'array', min: 1, message: '请添加至少一个 ECID', trigger: 'change' }],
@@ -214,14 +252,47 @@ const recordRules = {
 const recordSubmitting = ref(false)
 const recordLoading = ref(false)
 const recordList = ref([])
-const recordPage = reactive({ page: 1, size: 10, total: 0 })
+const recordPage = reactive({ pageNum: 1, pageSize: 10, total: 0 })
+const recordFilterBatchNo = ref('')
 const generatedSn = ref('')
+const exportLoading = ref(false)
+
+function normalizeEcidList(r) {
+  let ecids = []
+  if (Array.isArray(r.ecidList)) {
+    ecids = r.ecidList
+  } else if (typeof r.ecidList === 'string' && r.ecidList.trim()) {
+    try {
+      ecids = JSON.parse(r.ecidList)
+    } catch {
+      ecids = []
+    }
+  }
+  return ecids
+}
+
+function isOnChain(row) {
+  return row.status === 'ON_CHAIN' || row.chainRegistered === 1
+}
+
+function onRecordFilterChange() {
+  recordPage.pageNum = 1
+  loadRecords()
+}
 
 async function loadRecords() {
   recordLoading.value = true
   try {
-    const res = await getAssemblyRecordList({ page: recordPage.page, size: recordPage.size })
-    recordList.value = (res.data?.records || res.data?.list || []).map(r => ({ ...r, _registering: false }))
+    const params = { pageNum: recordPage.pageNum, pageSize: recordPage.pageSize }
+    if (recordFilterBatchNo.value) {
+      params.assemblyBatchNo = recordFilterBatchNo.value
+    }
+    const res = await getAssemblyRecordList(params)
+    recordList.value = (res.data?.records || res.data?.list || []).map(r => ({
+      ...r,
+      ecidList: normalizeEcidList(r),
+      _registering: false
+    }))
     recordPage.total = res.data?.total || 0
   } catch (e) {
     ElMessage.error('加载组装记录失败')
@@ -240,11 +311,41 @@ async function handleCreateRecord() {
     ElMessage.success('创建组装记录成功')
     recordFormRef.value.resetFields()
     recordForm.ecidList = []
+    recordForm.sn = ''
     loadRecords()
+    loadBatches()
   } catch (e) {
     ElMessage.error(e.message || '创建失败')
   } finally {
     recordSubmitting.value = false
+  }
+}
+
+async function handleExportRecords() {
+  exportLoading.value = true
+  try {
+    const token = useUserStore().token
+    const params = new URLSearchParams()
+    if (recordFilterBatchNo.value) params.set('assemblyBatchNo', recordFilterBatchNo.value)
+    const r = await fetch(`/api/assembler/assembly/record/export?${params}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    if (!r.ok) {
+      ElMessage.error('导出失败，请检查登录状态')
+      return
+    }
+    const blob = await r.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'assembly-records.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch {
+    ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value = false
   }
 }
 
@@ -253,7 +354,8 @@ async function handleRegister(row) {
   try {
     await registerAssemblyOnChain(row.id)
     ElMessage.success('注册上链成功')
-    row.chainStatus = 'ON_CHAIN'
+    row.status = 'ON_CHAIN'
+    row.chainRegistered = 1
   } catch (e) {
     ElMessage.error(e.message || '上链失败')
   } finally {
@@ -273,6 +375,9 @@ onMounted(() => {
 }
 .mb-16 {
   margin-bottom: 16px;
+}
+.filter-bar {
+  margin-bottom: 0;
 }
 .mt-16 {
   margin-top: 16px;

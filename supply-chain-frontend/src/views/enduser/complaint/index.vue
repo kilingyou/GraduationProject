@@ -3,7 +3,10 @@
     <el-card shadow="never">
       <div class="card-header">
         <div class="title">质量投诉/申请召回</div>
-        <el-button type="primary" @click="openDialog">发起投诉</el-button>
+        <div class="toolbar">
+          <el-button @click="bindDialogVisible = true">绑定产品</el-button>
+          <el-button type="primary" @click="openDialog">发起投诉</el-button>
+        </div>
       </div>
 
       <el-table :data="tableData" v-loading="loading" border stripe style="margin-top: 16px">
@@ -42,7 +45,14 @@
     <el-dialog v-model="dialogVisible" title="发起投诉" width="680px" @close="resetForm">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="110px">
         <el-form-item label="产品SN" prop="sn">
-          <el-input v-model="form.sn" placeholder="请输入产品 SN" />
+          <el-select v-model="form.sn" filterable placeholder="请选择已绑定 SN">
+            <el-option
+              v-for="item in boundProducts"
+              :key="item.id"
+              :label="item.sn"
+              :value="item.sn"
+            />
+          </el-select>
         </el-form-item>
 
         <el-form-item label="故障类型" prop="faultType">
@@ -76,7 +86,7 @@
             <div class="el-upload__text">
               将图片/文件拖到这里，或<em>点击选择</em>
             </div>
-            <div class="el-upload__tip">本版本仅记录文件名作为占位 evidenceUrls</div>
+            <div class="el-upload__tip">将上传证据文件至 IPFS，并在链上固化摘要哈希（txHash）</div>
           </el-upload>
         </el-form-item>
       </el-form>
@@ -97,14 +107,37 @@
         <el-descriptions-item label="故障描述" :span="2">{{ detail.faultDesc }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <el-dialog v-model="bindDialogVisible" title="绑定产品" width="520px" @close="resetBindForm">
+      <el-form :model="bindForm" :rules="bindRules" ref="bindFormRef" label-width="100px">
+        <el-form-item label="产品 SN" prop="sn">
+          <el-input v-model="bindForm.sn" placeholder="销售后的整机 SN" />
+        </el-form-item>
+        <el-form-item label="姓名" prop="customerName">
+          <el-input v-model="bindForm.customerName" placeholder="与销售登记一致（可留空）" />
+        </el-form-item>
+        <el-form-item label="手机号" prop="customerPhone">
+          <el-input v-model="bindForm.customerPhone" placeholder="与销售登记一致，用于哈希比对" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="bindDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="binding" @click="submitBind">确认绑定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { submitComplaint as submitComplaintApi, getComplaintList } from '@/api/enduser'
+import {
+  bindUserProduct,
+  getUserProductList,
+  submitComplaint as submitComplaintApi,
+  getComplaintList
+} from '@/api/enduser'
 
 const loading = ref(false)
 const total = ref(0)
@@ -116,6 +149,10 @@ const dialogVisible = ref(false)
 const submitting = ref(false)
 const detailVisible = ref(false)
 const detail = ref(null)
+const boundProducts = ref([])
+const bindDialogVisible = ref(false)
+const binding = ref(false)
+const bindFormRef = ref(null)
 
 const evidenceFiles = ref([])
 
@@ -133,8 +170,18 @@ const rules = {
 }
 
 const formRef = ref(null)
+const bindForm = reactive({ sn: '', customerName: '', customerPhone: '' })
+const bindRules = {
+  sn: [{ required: true, message: '请输入产品 SN', trigger: 'blur' }],
+  customerPhone: [{ required: true, message: '请输入手机号', trigger: 'blur' }]
+}
 
 function openDialog() {
+  if (!boundProducts.value.length) {
+    ElMessage.warning('请先绑定产品后再发起投诉')
+    bindDialogVisible.value = true
+    return
+  }
   dialogVisible.value = true
 }
 
@@ -159,9 +206,14 @@ async function submitComplaintForm() {
 
   submitting.value = true
   try {
-    const names = evidenceFiles.value.map(f => f.name)
-    form.evidenceUrls = JSON.stringify(names)
-    const res = await submitComplaintApi(form)
+    const fd = new FormData()
+    fd.append('sn', form.sn)
+    fd.append('faultType', form.faultType)
+    fd.append('faultDesc', form.faultDesc)
+    evidenceFiles.value.forEach(f => {
+      if (f?.raw) fd.append('evidenceFiles', f.raw)
+    })
+    const res = await submitComplaintApi(fd)
     ElMessage.success('提交成功')
     dialogVisible.value = false
     await fetchList()
@@ -178,10 +230,49 @@ function viewDetail(row) {
   detailVisible.value = true
 }
 
+function resetBindForm() {
+  bindForm.sn = ''
+  bindForm.customerName = ''
+  bindForm.customerPhone = ''
+}
+
+async function fetchBoundProducts() {
+  const res = await getUserProductList()
+  boundProducts.value = res.data || []
+}
+
+async function submitBind() {
+  if (!bindFormRef.value) return
+  await bindFormRef.value.validate()
+  binding.value = true
+  try {
+    await bindUserProduct({
+      sn: bindForm.sn.trim(),
+      customerName: bindForm.customerName?.trim() || '',
+      customerPhone: bindForm.customerPhone.trim()
+    })
+    ElMessage.success('绑定成功')
+    bindDialogVisible.value = false
+    await fetchBoundProducts()
+    if (!form.sn && boundProducts.value.length) {
+      form.sn = boundProducts.value[0].sn
+    }
+  } catch {
+    ElMessage.error('绑定失败')
+  } finally {
+    binding.value = false
+  }
+}
+
 async function fetchList() {
   loading.value = true
   try {
-    const res = await getComplaintList({ pageNum: pageNum.value, pageSize: pageSize.value })
+    const res = await getComplaintList({
+      pageNum: pageNum.value,
+      pageSize: pageSize.value,
+      page: pageNum.value,
+      size: pageSize.value
+    })
     tableData.value = res.data?.records || []
     total.value = res.data?.total || 0
   } catch {
@@ -193,6 +284,7 @@ async function fetchList() {
 
 onMounted(() => {
   fetchList()
+  fetchBoundProducts()
 })
 </script>
 
@@ -206,6 +298,11 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
 }
 
 .title {

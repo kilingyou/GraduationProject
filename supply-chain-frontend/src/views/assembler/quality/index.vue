@@ -69,17 +69,17 @@
       </template>
       <el-table :data="reportList" v-loading="loading" border stripe>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="targetType" label="关联类型" width="100" align="center" />
-        <el-table-column prop="targetId" label="关联标识" width="200" />
-        <el-table-column prop="result" label="检测结果" width="120" align="center">
+        <el-table-column prop="sn" label="整机 SN" width="180" />
+        <el-table-column prop="assemblyBatchNo" label="组装批次" width="180" />
+        <el-table-column prop="testResult" label="检测结果" width="120" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.result === 'PASS' ? 'success' : 'danger'" size="small">
-              {{ row.result === 'PASS' ? '通过' : '不通过' }}
+            <el-tag :type="row.testResult === 'PASS' ? 'success' : row.testResult === 'FAIL' ? 'danger' : 'info'" size="small">
+              {{ row.testResult === 'PASS' ? '通过' : row.testResult === 'FAIL' ? '不通过' : row.testResult || '—' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="reportHash" label="报告哈希" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="上传时间" width="180" />
+        <el-table-column prop="testReportHash" label="报告哈希" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="createTime" label="记录时间" width="180" />
       </el-table>
       <el-pagination
         class="mt-16"

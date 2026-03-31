@@ -4,12 +4,21 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
+import com.scm.common.exception.BusinessException;
 import com.scm.module.enduser.entity.RecallRequest;
 import com.scm.module.enduser.service.RecallRequestService;
+import com.scm.module.enduser.service.UserProductService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/enduser/complaint")
@@ -17,11 +26,40 @@ import org.springframework.web.bind.annotation.*;
 public class ComplaintController {
 
     private final RecallRequestService recallRequestService;
+    private final UserProductService userProductService;
 
-    @PostMapping
-    public Result<RecallRequest> submit(@RequestBody RecallRequest request) {
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<RecallRequest> submitMultipart(
+            @RequestParam String sn,
+            @RequestParam(required = false) String faultType,
+            @RequestParam String faultDesc,
+            @RequestPart(value = "evidenceFiles", required = false) MultipartFile[] evidenceFiles
+    ) throws IOException {
+        LoginUser loginUser = getCurrentUser();
+        RecallRequest request = new RecallRequest();
+        request.setUserId(loginUser.getUserId());
+        request.setSn(sn);
+        request.setFaultType(faultType);
+        request.setFaultDesc(faultDesc);
+        if (!userProductService.isBound(loginUser.getUserId(), sn)) {
+            throw new BusinessException("请先完成产品绑定后再提交投诉");
+        }
+
+        List<MultipartFile> files = evidenceFiles == null ?
+                Collections.<MultipartFile>emptyList() :
+                Arrays.asList(evidenceFiles);
+
+        RecallRequest created = recallRequestService.createRequest(request, files);
+        return Result.ok(created);
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Result<RecallRequest> submitJson(@RequestBody RecallRequest request) {
         LoginUser loginUser = getCurrentUser();
         request.setUserId(loginUser.getUserId());
+        if (!userProductService.isBound(loginUser.getUserId(), request.getSn())) {
+            throw new BusinessException("请先完成产品绑定后再提交投诉");
+        }
         RecallRequest created = recallRequestService.createRequest(request);
         return Result.ok(created);
     }
@@ -29,10 +67,14 @@ public class ComplaintController {
     @GetMapping("/list")
     public Result<PageResult<RecallRequest>> list(
             @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         LoginUser loginUser = getCurrentUser();
-        Page<RecallRequest> page = new Page<>(pageNum, pageSize);
-        IPage<RecallRequest> result = recallRequestService.listByUser(loginUser.getUserId(), page);
+        int pn = pageNum != null && pageNum > 0 ? pageNum : (page != null && page > 0 ? page : 1);
+        int ps = pageSize != null && pageSize > 0 ? pageSize : (size != null && size > 0 ? size : 10);
+        Page<RecallRequest> recallPage = new Page<>(pn, ps);
+        IPage<RecallRequest> result = recallRequestService.listByUser(loginUser.getUserId(), recallPage);
 
         PageResult<RecallRequest> pageResult = new PageResult<RecallRequest>()
                 .setRecords(result.getRecords())

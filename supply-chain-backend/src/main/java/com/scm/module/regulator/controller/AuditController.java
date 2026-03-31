@@ -2,6 +2,8 @@ package com.scm.module.regulator.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scm.common.Result;
+import com.scm.common.util.HashUtil;
+import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.module.system.entity.SysSupplierAudit;
 import com.scm.module.system.mapper.SysSupplierAuditMapper;
 import com.scm.security.LoginUser;
@@ -18,6 +20,7 @@ import java.util.List;
 public class AuditController {
 
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
+    private final BlockchainAnchorService blockchainAnchorService;
 
     @GetMapping("/list")
     public Result<List<SysSupplierAudit>> list() {
@@ -38,6 +41,8 @@ public class AuditController {
         audit.setAuditStatus("APPROVED");
         audit.setAuditorId(loginUser.getUserId());
         audit.setAuditTime(LocalDateTime.now());
+        String apPayload = audit.getId() + "|" + audit.getUserId() + "|" + audit.getEnterpriseName();
+        audit.setTxHash(blockchainAnchorService.anchor("SUPPLIER_APPROVE", HashUtil.sha256Hex(apPayload)));
         sysSupplierAuditMapper.updateById(audit);
         return Result.ok(audit);
     }
@@ -56,6 +61,8 @@ public class AuditController {
         if (body != null && body.getAuditOpinion() != null) {
             audit.setAuditOpinion(body.getAuditOpinion());
         }
+        String rjPayload = audit.getId() + "|REJECT|" + audit.getAuditOpinion();
+        audit.setTxHash(blockchainAnchorService.anchor("SUPPLIER_REJECT", HashUtil.sha256Hex(rjPayload)));
         sysSupplierAuditMapper.updateById(audit);
         return Result.ok(audit);
     }

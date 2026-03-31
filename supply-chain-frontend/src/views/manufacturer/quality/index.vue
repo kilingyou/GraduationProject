@@ -109,7 +109,7 @@
                 <el-text class="hash-text" truncated>{{ row.fileHash || '-' }}</el-text>
               </template>
             </el-table-column>
-            <el-table-column prop="createdAt" label="创建时间" width="170" align="center" />
+            <el-table-column prop="createTime" label="创建时间" width="170" align="center" />
           </el-table>
 
           <div class="pagination-wrapper">
@@ -173,6 +173,7 @@ async function uploadReport() {
   formData.append('file', qcForm.fileList[0].raw)
   formData.append('targetType', qcForm.targetType)
   formData.append('targetId', qcForm.targetId)
+  formData.append('result', qcForm.result)
   const { data } = await uploadQualityReport(formData)
   return data
 }

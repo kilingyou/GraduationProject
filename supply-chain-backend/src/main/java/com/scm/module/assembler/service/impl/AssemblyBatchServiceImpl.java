@@ -9,6 +9,11 @@ import com.scm.module.assembler.mapper.AssemblyBatchMapper;
 import com.scm.module.assembler.service.AssemblyBatchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -16,8 +21,14 @@ public class AssemblyBatchServiceImpl
         extends ServiceImpl<AssemblyBatchMapper, AssemblyBatch>
         implements AssemblyBatchService {
 
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.BASIC_ISO_DATE;
+
     @Override
     public AssemblyBatch createBatch(AssemblyBatch batch) {
+        if (!StringUtils.hasText(batch.getBatchNo())) {
+            batch.setBatchNo("ASM-" + LocalDate.now().format(DATE_FMT) + "-"
+                    + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        }
         if (batch.getCompletedQty() == null) {
             batch.setCompletedQty(0);
         }

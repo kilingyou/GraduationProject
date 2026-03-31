@@ -8,6 +8,9 @@
         </div>
       </template>
 
+      <el-alert type="info" :closable="false" show-icon class="mb-16"
+        title="列表展示当前货权（current_holder_id）在您名下的整机；组装商发货后收货方需在「物流流转」确认收货后，商品状态变为在库。若数据库为旧版，请执行后端 db/alter_assembly_current_holder.sql。" />
+
       <!-- Filters -->
       <el-row :gutter="16" class="mb-16">
         <el-col :span="8">
@@ -19,8 +22,8 @@
           <el-radio-group v-model="query.status" @change="loadList">
             <el-radio-button label="">全部</el-radio-button>
             <el-radio-button label="IN_STOCK">在库</el-radio-button>
-            <el-radio-button label="IN_TRANSIT">在途</el-radio-button>
-            <el-radio-button label="SOLD">已售出</el-radio-button>
+            <el-radio-button label="IN_TRANSIT">在途发出</el-radio-button>
+            <el-radio-button label="ON_CHAIN">已上链待出</el-radio-button>
           </el-radio-group>
         </el-col>
       </el-row>
@@ -28,13 +31,14 @@
       <!-- Table -->
       <el-table :data="list" v-loading="loading" border stripe>
         <el-table-column prop="sn" label="SN" width="200" />
-        <el-table-column prop="productModel" label="产品型号" width="160" />
+        <el-table-column prop="assemblyBatchNo" label="组装批次" width="180" />
+        <el-table-column prop="firmwareVersion" label="固件版本" width="120" />
         <el-table-column prop="status" label="状态" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="inboundTime" label="入库时间" min-width="180" />
+        <el-table-column prop="updateTime" label="更新时间" min-width="180" />
       </el-table>
       <el-pagination
         class="mt-16"
@@ -78,11 +82,11 @@ async function loadList() {
 }
 
 function statusType(s) {
-  const m = { IN_STOCK: 'success', IN_TRANSIT: 'warning', SOLD: 'info' }
+  const m = { IN_STOCK: 'success', IN_TRANSIT: 'warning', ON_CHAIN: 'info', ASSEMBLED: '' }
   return m[s] ?? ''
 }
 function statusLabel(s) {
-  const m = { IN_STOCK: '在库', IN_TRANSIT: '在途', SOLD: '已售出' }
+  const m = { IN_STOCK: '在库', IN_TRANSIT: '在途', ON_CHAIN: '已上链', ASSEMBLED: '已组装' }
   return m[s] ?? s
 }
 

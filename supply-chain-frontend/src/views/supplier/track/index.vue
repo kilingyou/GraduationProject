@@ -13,6 +13,7 @@
           <el-option label="已接单" value="ACCEPTED" />
           <el-option label="生产中" value="IN_PRODUCTION" />
           <el-option label="已完成" value="COMPLETED" />
+          <el-option label="已撤销" value="CANCELLED" />
         </el-select>
       </div>
     </div>
@@ -126,13 +127,14 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getProductionOrderList, getProductionOrderDetail } from '@/api/supplier'
+import { getProductionOrderList, getProductionOrderTrack } from '@/api/supplier'
 
 const STATUS_MAP = {
   PENDING_ACCEPTANCE: { label: '待接单', type: 'warning' },
   ACCEPTED: { label: '已接单', type: '' },
   IN_PRODUCTION: { label: '生产中', type: 'info' },
-  COMPLETED: { label: '已完成', type: 'success' }
+  COMPLETED: { label: '已完成', type: 'success' },
+  CANCELLED: { label: '已撤销', type: 'info' }
 }
 
 const STATUS_FLOW = ['PENDING_ACCEPTANCE', 'ACCEPTED', 'IN_PRODUCTION', 'COMPLETED']
@@ -146,6 +148,10 @@ function statusType(status) {
 }
 
 function getTimelineSteps(row) {
+  if (row.status === 'CANCELLED') {
+    const t = row._detail?.statusTimes?.CANCELLED || ''
+    return [{ label: '订单已撤销', done: true, active: true, time: t }]
+  }
   const currentIdx = STATUS_FLOW.indexOf(row.status)
   return STATUS_FLOW.map((s, i) => ({
     label: STEP_LABELS[s],
@@ -193,7 +199,7 @@ async function handleExpand(row) {
   if (row._detail) return
   row._loading = true
   try {
-    const res = await getProductionOrderDetail(row.id)
+    const res = await getProductionOrderTrack(row.id)
     row._detail = res.data || {}
   } catch {
     ElMessage.error('获取订单详情失败')

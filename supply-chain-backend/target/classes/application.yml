@@ -11,8 +11,8 @@ spring:
     druid:
       driver-class-name: com.mysql.cj.jdbc.Driver
       url: jdbc:mysql://localhost:3306/supply_chain_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      username: ${DB_USERNAME:root}
-      password: ${DB_PASSWORD:}
+      username: root
+      password: root
       initial-size: 5
       min-idle: 5
       max-active: 20
@@ -59,3 +59,21 @@ logging:
     root: INFO
     com.scm: INFO
     com.baomidou.mybatisplus: INFO
+
+# Integration toggles (production: replace stub / in-memory with real IPFS + FISCO BCOS clients)
+scm:
+  ipfs:
+    mode: in-memory
+    # 浏览器下载设计文档/协议原件时拼接 CID（生产环境改为自有网关）
+    gateway: https://ipfs.io/ipfs/
+  blockchain:
+    mode: stub
+  scheduler:
+    enabled: true
+    # 扫描周期（毫秒）
+    recall-scan-interval-ms: 60000
+    # 同一“故障批次”在时间窗口内投诉数达到阈值 -> 自动生成召回通告
+    recall-threshold-count: 3
+    recall-threshold-window-minutes: 60
+    # 自动生成召回通告时的默认状态（DRAFT/PUBLISHED）
+    recall-notice-default-status: DRAFT

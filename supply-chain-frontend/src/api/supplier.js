@@ -41,6 +41,16 @@ export function deleteBom(id) {
   return request({ url: `/supplier/bom/${id}`, method: 'delete' })
 }
 
+export function parseBomExcel(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  return request({
+    url: '/supplier/bom/import/parse',
+    method: 'post',
+    data: fd
+  })
+}
+
 export function createProductionOrder(data) {
   return request({ url: '/supplier/order', method: 'post', data })
 }
@@ -51,4 +61,16 @@ export function getProductionOrderList(params) {
 
 export function getProductionOrderDetail(id) {
   return request({ url: `/supplier/order/${id}`, method: 'get' })
+}
+
+export function getProductionOrderTrack(id) {
+  return request({ url: `/supplier/order/${id}/track`, method: 'get' })
+}
+
+export function cancelProductionOrder(id) {
+  return request({ url: `/supplier/order/${id}/cancel`, method: 'post' })
+}
+
+export function listManufacturerOptions() {
+  return request({ url: '/supplier/manufacturers', method: 'get' })
 }

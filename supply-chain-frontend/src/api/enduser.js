@@ -4,8 +4,25 @@ export function traceProduct(sn) {
   return request({ url: `/public/trace/${sn}`, method: 'get' })
 }
 
+export function verifyTraceFile(ipfsCid, expectedHash) {
+  return request({
+    url: '/public/trace/file/verify',
+    method: 'get',
+    params: { ipfsCid, expectedHash }
+  })
+}
+
 export function submitComplaint(data) {
   return request({ url: '/enduser/complaint', method: 'post', data })
+}
+
+/** body: { sn, customerName?, customerPhone } — 手机号与销售登记一致方可绑定 */
+export function bindUserProduct(data) {
+  return request({ url: '/enduser/product/bind', method: 'post', data })
+}
+
+export function getUserProductList() {
+  return request({ url: '/enduser/product/list', method: 'get' })
 }
 
 export function getComplaintList(params) {

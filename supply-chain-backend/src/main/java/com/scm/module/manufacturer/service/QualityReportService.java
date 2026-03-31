@@ -5,5 +5,5 @@ import com.scm.module.manufacturer.entity.QualityReport;
 
 public interface QualityReportService extends IService<QualityReport> {
 
-    boolean uploadReport(QualityReport report);
+    QualityReport saveManufacturedReport(QualityReport report, byte[] fileBytes, String originalFilename);
 }

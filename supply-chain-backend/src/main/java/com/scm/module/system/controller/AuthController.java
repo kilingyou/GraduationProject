@@ -1,7 +1,9 @@
 package com.scm.module.system.controller;
 
 import com.scm.common.Result;
+import com.scm.module.system.entity.SysMenu;
 import com.scm.module.system.entity.SysUser;
+import com.scm.module.system.service.SysMenuService;
 import com.scm.module.system.service.SysUserService;
 import com.scm.security.JwtTokenProvider;
 import com.scm.security.LoginUser;
@@ -10,14 +12,21 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -27,6 +36,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final SysUserService sysUserService;
+    private final SysMenuService sysMenuService;
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody Map<String, String> loginRequest) {
@@ -40,16 +50,17 @@ public class AuthController {
         LoginUser loginUser = (LoginUser) authentication.getPrincipal();
         String token = jwtTokenProvider.generateToken(loginUser.getUserId(), loginUser.getUsername(), loginUser.getRoleKey());
 
+        SysUser user = sysUserService.getUserInfo(loginUser.getUserId());
+        List<SysMenu> menus = sysMenuService.getMenuTree(loginUser.getUserId());
+
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
-        data.put("userId", loginUser.getUserId());
-        data.put("username", loginUser.getUsername());
-        data.put("roleKey", loginUser.getRoleKey());
-        data.put("blockchainAddr", loginUser.getBlockchainAddr());
+        data.put("user", user);
+        data.put("menus", menus);
         return Result.ok(data);
     }
 
-    @PostMapping("/register")
+    @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Result<Void> register(@RequestBody Map<String, Object> params) {
         SysUser user = new SysUser();
         user.setUsername((String) params.get("username"));
@@ -65,10 +76,44 @@ public class AuthController {
         return Result.ok();
     }
 
+    @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<Void> registerMultipart(
+            @RequestParam String username,
+            @RequestParam String password,
+            @RequestParam(required = false) String enterpriseName,
+            @RequestParam(required = false) String creditCode,
+            @RequestParam(required = false) String contactPerson,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String email,
+            @RequestParam String roleKey,
+            @RequestParam(value = "files", required = false) MultipartFile[] files) {
+        SysUser user = new SysUser();
+        user.setUsername(username);
+        user.setPassword(password);
+        user.setEnterpriseName(enterpriseName);
+        user.setCreditCode(creditCode);
+        user.setContactPerson(contactPerson);
+        user.setPhone(phone);
+        user.setEmail(email);
+
+        List<MultipartFile> qualification = files == null ? Collections.<MultipartFile>emptyList()
+                : Arrays.stream(files).filter(f -> f != null && !f.isEmpty()).collect(Collectors.toList());
+        if ("supplier".equalsIgnoreCase(roleKey)) {
+            sysUserService.register(user, roleKey, qualification);
+        } else {
+            sysUserService.register(user, roleKey);
+        }
+        return Result.ok();
+    }
+
     @GetMapping("/info")
-    public Result<SysUser> info() {
+    public Result<Map<String, Object>> info() {
         LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         SysUser userInfo = sysUserService.getUserInfo(loginUser.getUserId());
-        return Result.ok(userInfo);
+        List<SysMenu> menus = sysMenuService.getMenuTree(loginUser.getUserId());
+        Map<String, Object> data = new HashMap<>();
+        data.put("user", userInfo);
+        data.put("menus", menus);
+        return Result.ok(data);
     }
 }

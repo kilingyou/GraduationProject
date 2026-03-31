@@ -4,6 +4,15 @@
       <el-button type="primary" @click="openCreateDialog">
         <el-icon><Plus /></el-icon>创建BOM
       </el-button>
+      <el-button @click="downloadBomTemplate">下载 Excel 模板</el-button>
+      <el-upload
+        :auto-upload="false"
+        :show-file-list="false"
+        accept=".xlsx,.xls"
+        :on-change="handleBomExcelPick"
+      >
+        <el-button type="success" plain>Excel 导入物料</el-button>
+      </el-upload>
     </div>
 
     <el-table v-loading="loading" :data="tableData" border stripe>
@@ -128,8 +137,8 @@
       <h4 style="margin-bottom: 12px">物料清单</h4>
       <el-table :data="detail.items || []" border size="small">
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="materialName" label="物料名称" min-width="130" />
-        <el-table-column prop="materialCode" label="物料编号" min-width="120" />
+        <el-table-column prop="partName" label="物料名称" min-width="130" />
+        <el-table-column prop="partNumber" label="物料编号" min-width="120" />
         <el-table-column prop="specification" label="规格型号" min-width="120" />
         <el-table-column prop="quantity" label="数量" width="80" align="center" />
         <el-table-column prop="unit" label="单位" width="80" align="center" />
@@ -142,8 +151,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import { createBom, getBomList, getBomDetail, deleteBom } from '@/api/supplier'
+import { createBom, getBomList, getBomDetail, deleteBom, parseBomExcel } from '@/api/supplier'
 import { getDesignDocList } from '@/api/supplier'
+import { useUserStore } from '@/store/user'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -202,6 +212,49 @@ async function fetchDesignDocs() {
 function openCreateDialog() {
   fetchDesignDocs()
   createDialogVisible.value = true
+}
+
+async function downloadBomTemplate() {
+  const token = useUserStore().token
+  try {
+    const r = await fetch('/api/supplier/bom/import-template', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    if (!r.ok) throw new Error('download failed')
+    const blob = await r.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'BOM导入模板.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('模板下载失败，请登录后重试')
+  }
+}
+
+async function handleBomExcelPick(uploadFile) {
+  const raw = uploadFile?.raw
+  if (!raw) return
+  try {
+    const res = await parseBomExcel(raw)
+    const items = res.data || []
+    await fetchDesignDocs()
+    createForm.bomName = ''
+    createForm.designDocId = ''
+    createForm.version = ''
+    createForm.items = items.map((i) => ({
+      materialName: i.partName,
+      materialCode: i.partNumber,
+      specification: i.specification || '',
+      quantity: i.quantity || 1,
+      unit: i.unit || ''
+    }))
+    createDialogVisible.value = true
+    ElMessage.success(`已解析 ${items.length} 条物料，请填写 BOM 名称、设计文档与版本后创建`)
+  } catch {
+    /* interceptor */
+  }
 }
 
 function addItem() {
@@ -274,6 +327,13 @@ onMounted(() => fetchList())
 </script>
 
 <style scoped lang="scss">
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
 .add-item-btn {
   margin-top: 12px;
   width: 100%;

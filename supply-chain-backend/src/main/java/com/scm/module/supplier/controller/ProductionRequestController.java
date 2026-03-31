@@ -1,11 +1,12 @@
 package com.scm.module.supplier.controller;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
+import com.scm.module.supplier.dto.ProductionOrderTrackVO;
+import com.scm.module.supplier.dto.ProductionRequestVO;
 import com.scm.module.supplier.entity.ProductionRequest;
 import com.scm.module.supplier.service.ProductionRequestService;
+import com.scm.module.supplier.service.ProductionRequestViewService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 public class ProductionRequestController {
 
     private final ProductionRequestService productionRequestService;
+    private final ProductionRequestViewService productionRequestViewService;
 
     @PostMapping
     public Result<ProductionRequest> create(@RequestBody ProductionRequest request) {
@@ -28,31 +30,41 @@ public class ProductionRequestController {
     }
 
     @GetMapping("/list")
-    public Result<PageResult<ProductionRequest>> list(
+    public Result<PageResult<ProductionRequestVO>> list(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String status) {
         LoginUser loginUser = getCurrentUser();
-
-        Page<ProductionRequest> page = new Page<>(pageNum, pageSize);
-        IPage<ProductionRequest> result = productionRequestService.listBySupplier(
-                loginUser.getUserId(), page, status);
-
-        PageResult<ProductionRequest> pageResult = new PageResult<ProductionRequest>()
-                .setRecords(result.getRecords())
-                .setTotal(result.getTotal())
-                .setCurrent(result.getCurrent())
-                .setSize(result.getSize());
+        PageResult<ProductionRequestVO> pageResult =
+                productionRequestViewService.pageForSupplier(loginUser.getUserId(), pageNum, pageSize, status);
         return Result.ok(pageResult);
     }
 
     @GetMapping("/{id}")
-    public Result<ProductionRequest> detail(@PathVariable Long id) {
-        ProductionRequest request = productionRequestService.getById(id);
-        if (request == null) {
-            return Result.fail("Production request not found");
+    public Result<ProductionRequestVO> detail(@PathVariable Long id) {
+        LoginUser loginUser = getCurrentUser();
+        ProductionRequestVO vo = productionRequestViewService.detailForSupplier(id, loginUser.getUserId());
+        if (vo == null) {
+            return Result.fail("订单不存在");
         }
-        return Result.ok(request);
+        return Result.ok(vo);
+    }
+
+    @GetMapping("/{id}/track")
+    public Result<ProductionOrderTrackVO> track(@PathVariable Long id) {
+        LoginUser loginUser = getCurrentUser();
+        ProductionOrderTrackVO track = productionRequestViewService.trackForSupplier(id, loginUser.getUserId());
+        if (track == null) {
+            return Result.fail("订单不存在");
+        }
+        return Result.ok(track);
+    }
+
+    @PostMapping("/{id}/cancel")
+    public Result<Void> cancel(@PathVariable Long id) {
+        LoginUser loginUser = getCurrentUser();
+        productionRequestService.cancelOrderBySupplier(id, loginUser.getUserId());
+        return Result.ok();
     }
 
     private LoginUser getCurrentUser() {

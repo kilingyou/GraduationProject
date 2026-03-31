@@ -43,11 +43,13 @@
         >
           <template #extra>
             <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="器件型号">{{ scanResult.model || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="供应商">{{ scanResult.supplier || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="生产批次">{{ scanResult.batchNo || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="链上状态">
-                <el-tag type="success" size="small">已上链</el-tag>
+              <el-descriptions-item label="器件类型">{{ scanResult.deviceType || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="生产批次">{{ scanResult.manufacturerBatchId || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="说明" :span="2">{{ scanResult.message || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="部件链上">
+                <el-tag :type="scanResult.chainRegistered === 1 ? 'success' : 'info'" size="small">
+                  {{ scanResult.chainRegistered === 1 ? '已注册' : '未注册' }}
+                </el-tag>
               </el-descriptions-item>
             </el-descriptions>
           </template>
@@ -60,7 +62,8 @@
         >
           <template #extra>
             <el-alert type="error" :closable="false" show-icon>
-              拒绝原因：{{ scanResult.rejectReason || '质检不合格' }}
+              {{ scanResult.message || '不可用于组装' }}
+              <span v-if="scanResult.boundToSn">（已绑定整机 SN：{{ scanResult.boundToSn }}）</span>
             </el-alert>
           </template>
         </el-result>
@@ -93,10 +96,11 @@
           <el-button>选择文件</el-button>
         </template>
         <el-button type="primary" :loading="importLoading" style="margin-left: 12px" @click="handleBatchImport">
-          批量导入
+          解析并校验
         </el-button>
+        <el-button style="margin-left: 8px" @click="handleDownloadTemplate">下载 Excel 模板</el-button>
         <template #tip>
-          <div class="el-upload__tip">支持 .xlsx / .xls / .csv 格式</div>
+          <div class="el-upload__tip">上传后解析 ECID 列并逐条校验；模板首列为表头「ECID」</div>
         </template>
       </el-upload>
 
@@ -109,7 +113,7 @@
         style="margin-top: 16px"
       >
         <el-table-column prop="ecid" label="ECID" min-width="200" />
-        <el-table-column prop="model" label="型号" width="140" />
+        <el-table-column prop="deviceType" label="器件类型" width="140" />
         <el-table-column prop="status" label="验证状态" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">
@@ -127,7 +131,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Monitor, Search, Upload } from '@element-plus/icons-vue'
-import { scanEcid, batchImportEcids } from '@/api/assembler'
+import { scanEcid, importVerifyIntake, downloadIntakeImportTemplate } from '@/api/assembler'
 
 const scanForm = ref({ ecid: '' })
 const scanLoading = ref(false)
@@ -172,15 +176,30 @@ async function handleBatchImport() {
   try {
     const fd = new FormData()
     fd.append('file', importFile.value)
-    const res = await batchImportEcids(fd)
-    importResults.value = res.data || []
-    ElMessage.success(`导入完成，共 ${importResults.value.length} 条`)
+    const verifyRes = await importVerifyIntake(fd)
+    importResults.value = verifyRes.data || []
+    const pass = importResults.value.filter(r => r.status === 'PASS').length
+    ElMessage.success(`校验完成：${importResults.value.length} 条，通过 ${pass} 条`)
     uploadRef.value?.clearFiles()
     importFile.value = null
   } catch (e) {
-    ElMessage.error(e.message || '批量导入失败')
+    ElMessage.error(e.message || '导入校验失败')
   } finally {
     importLoading.value = false
+  }
+}
+
+async function handleDownloadTemplate() {
+  try {
+    const blob = await downloadIntakeImportTemplate()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'ECID导入模板.xlsx'
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('下载模板失败')
   }
 }
 

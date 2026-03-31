@@ -20,6 +20,9 @@ public class AssemblyRecord {
 
     private Long assemblerId;
 
+    /** 当前货权归属（组装完成/上链后默认组装商；物流收货后更新为分销商等） */
+    private Long currentHolderId;
+
     @TableField("ecid_list")
     private String ecidList;
 

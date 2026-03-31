@@ -16,29 +16,60 @@
           active-text-color="#409eff"
           router
         >
-          <template v-for="route in menuRoutes" :key="route.path">
-            <el-sub-menu v-if="route.children && route.children.length > 1" :index="route.path">
-              <template #title>
-                <el-icon><component :is="route.meta?.icon" /></el-icon>
-                <span>{{ route.meta?.title }}</span>
-              </template>
-              <el-menu-item
-                v-for="child in route.children"
-                :key="child.path"
-                :index="joinPath(route.path, child.path)"
-              >
-                <el-icon><component :is="child.meta?.icon" /></el-icon>
-                <span>{{ child.meta?.title }}</span>
-              </el-menu-item>
-            </el-sub-menu>
-
-            <el-menu-item
-              v-else-if="route.children && route.children.length === 1"
-              :index="joinPath(route.path, route.children[0].path)"
-            >
-              <el-icon><component :is="route.children[0].meta?.icon || route.meta?.icon" /></el-icon>
-              <span>{{ route.children[0].meta?.title || route.meta?.title }}</span>
+          <template v-if="useApiMenus">
+            <el-menu-item index="/dashboard">
+              <el-icon><HomeFilled /></el-icon>
+              <span>首页</span>
             </el-menu-item>
+            <template v-for="top in userStore.menus" :key="top.id || top.path">
+              <el-sub-menu
+                v-if="top.children && top.children.length > 0"
+                :index="top.path || String(top.id)"
+              >
+                <template #title>
+                  <el-icon><component :is="top.icon || 'FolderOpened'" /></el-icon>
+                  <span>{{ top.menuName }}</span>
+                </template>
+                <el-menu-item
+                  v-for="child in top.children"
+                  :key="child.id || child.path"
+                  :index="child.path"
+                >
+                  <el-icon><component :is="child.icon || 'Document'" /></el-icon>
+                  <span>{{ child.menuName }}</span>
+                </el-menu-item>
+              </el-sub-menu>
+              <el-menu-item v-else-if="top.path" :index="top.path">
+                <el-icon><component :is="top.icon || 'Document'" /></el-icon>
+                <span>{{ top.menuName }}</span>
+              </el-menu-item>
+            </template>
+          </template>
+          <template v-else>
+            <template v-for="route in menuRoutes" :key="route.path">
+              <el-sub-menu v-if="route.children && route.children.length > 1" :index="route.path">
+                <template #title>
+                  <el-icon><component :is="route.meta?.icon" /></el-icon>
+                  <span>{{ route.meta?.title }}</span>
+                </template>
+                <el-menu-item
+                  v-for="child in route.children"
+                  :key="child.path"
+                  :index="joinPath(route.path, child.path)"
+                >
+                  <el-icon><component :is="child.meta?.icon" /></el-icon>
+                  <span>{{ child.meta?.title }}</span>
+                </el-menu-item>
+              </el-sub-menu>
+
+              <el-menu-item
+                v-else-if="route.children && route.children.length === 1"
+                :index="joinPath(route.path, route.children[0].path)"
+              >
+                <el-icon><component :is="route.children[0].meta?.icon || route.meta?.icon" /></el-icon>
+                <span>{{ route.children[0].meta?.title || route.meta?.title }}</span>
+              </el-menu-item>
+            </template>
           </template>
         </el-menu>
       </el-scrollbar>
@@ -111,6 +142,8 @@ const roleLabels = {
 
 const roleKey = computed(() => userStore.userInfo?.roleKey || '')
 const roleLabel = computed(() => roleLabels[roleKey.value] || roleKey.value)
+
+const useApiMenus = computed(() => Array.isArray(userStore.menus) && userStore.menus.length > 0)
 
 function joinPath(base, child) {
   const a = (base || '').toString()

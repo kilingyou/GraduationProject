@@ -12,4 +12,6 @@ public interface ProductionRequestService extends IService<ProductionRequest> {
     IPage<ProductionRequest> listBySupplier(Long supplierId, Page<ProductionRequest> page, String status);
 
     IPage<ProductionRequest> listForManufacturer(Long manufacturerId, Page<ProductionRequest> page);
+
+    void cancelOrderBySupplier(Long orderDbId, Long supplierId);
 }

@@ -10,6 +10,7 @@ import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,18 +20,35 @@ public class InventoryController {
 
     private final AssemblyRecordService assemblyRecordService;
 
+    /**
+     * 我的库存：按 current_holder_id = 当前分销商，可筛选在库/在途（不含已售出）。
+     * 升级库需执行 db/alter_assembly_current_holder.sql。
+     */
     @GetMapping("/list")
     public Result<PageResult<AssemblyRecord>> list(
             @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sn,
+            @RequestParam(required = false) String status) {
         LoginUser loginUser = getCurrentUser();
-        Page<AssemblyRecord> page = new Page<>(pageNum, pageSize);
+        int pn = pageNum != null && pageNum > 0 ? pageNum : (page != null && page > 0 ? page : 1);
+        int ps = pageSize != null && pageSize > 0 ? pageSize : (size != null && size > 0 ? size : 10);
+        Page<AssemblyRecord> p = new Page<>(pn, ps);
 
-        IPage<AssemblyRecord> result = assemblyRecordService.page(page,
-                new LambdaQueryWrapper<AssemblyRecord>()
-                        .eq(AssemblyRecord::getStatus, "IN_STOCK")
-                        .orderByDesc(AssemblyRecord::getCreateTime));
+        LambdaQueryWrapper<AssemblyRecord> w = new LambdaQueryWrapper<AssemblyRecord>()
+                .eq(AssemblyRecord::getCurrentHolderId, loginUser.getUserId())
+                .ne(AssemblyRecord::getStatus, "SOLD")
+                .orderByDesc(AssemblyRecord::getUpdateTime);
+        if (StringUtils.hasText(sn)) {
+            w.like(AssemblyRecord::getSn, sn.trim());
+        }
+        if (StringUtils.hasText(status)) {
+            w.eq(AssemblyRecord::getStatus, status.trim());
+        }
 
+        IPage<AssemblyRecord> result = assemblyRecordService.page(p, w);
         PageResult<AssemblyRecord> pageResult = new PageResult<AssemblyRecord>()
                 .setRecords(result.getRecords())
                 .setTotal(result.getTotal())

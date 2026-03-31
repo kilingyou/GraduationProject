@@ -16,6 +16,22 @@ export function trackProduct(sn) {
   return request({ url: `/distributor/logistics/track/${sn}`, method: 'get' })
 }
 
+export function shipBatchProducts(formData) {
+  return request({
+    url: '/distributor/logistics/ship-batch',
+    method: 'post',
+    data: formData
+  })
+}
+
+export function downloadSnShipTemplate() {
+  return request({
+    url: '/distributor/logistics/sn-import-template',
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
 export function getInventoryList(params) {
   return request({ url: '/distributor/inventory/list', method: 'get', params })
 }

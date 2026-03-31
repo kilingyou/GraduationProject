@@ -12,6 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+
 @RestController
 @RequestMapping("/api/supplier/design")
 @RequiredArgsConstructor
@@ -36,7 +38,13 @@ public class DesignDocumentController {
                 .setFileName(file.getOriginalFilename())
                 .setFileSize(file.getSize());
 
-        DesignDocument saved = designDocumentService.upload(doc);
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException e) {
+            return Result.fail("读取上传文件失败");
+        }
+        DesignDocument saved = designDocumentService.upload(doc, bytes);
         return Result.ok(saved);
     }
 
@@ -59,23 +67,28 @@ public class DesignDocumentController {
 
     @GetMapping("/{id}")
     public Result<DesignDocument> detail(@PathVariable Long id) {
-        DesignDocument doc = designDocumentService.getById(id);
+        LoginUser loginUser = getCurrentUser();
+        DesignDocument doc = designDocumentService.getOwned(id, loginUser.getUserId());
         if (doc == null) {
-            return Result.fail("Design document not found");
+            return Result.fail("文档不存在");
         }
         return Result.ok(doc);
     }
 
     @PostMapping("/{id}/verify")
     public Result<Boolean> verify(@PathVariable Long id) {
+        LoginUser loginUser = getCurrentUser();
+        if (designDocumentService.getOwned(id, loginUser.getUserId()) == null) {
+            return Result.fail("文档不存在");
+        }
         boolean valid = designDocumentService.verifyHash(id);
         return Result.ok(valid);
     }
 
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
-        boolean removed = designDocumentService.removeById(id);
-        return removed ? Result.ok() : Result.fail("Delete failed");
+        designDocumentService.deleteOwnedIfUnused(id, getCurrentUser().getUserId());
+        return Result.ok();
     }
 
     private LoginUser getCurrentUser() {

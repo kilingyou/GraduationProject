@@ -19,8 +19,12 @@ export const useUserStore = defineStore('user', {
   actions: {
     async doLogin(loginForm) {
       const res = await login(loginForm)
-      this.token = res.data.token
-      setToken(res.data.token)
+      const token = res.data?.token
+      if (!token) {
+        throw new Error(res.message || '登录响应异常：缺少 token')
+      }
+      this.token = token
+      setToken(token)
       this.userInfo = res.data.user
       this.menus = res.data.menus || []
       return res

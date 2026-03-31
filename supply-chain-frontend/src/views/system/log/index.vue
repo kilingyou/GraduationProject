@@ -5,16 +5,8 @@
         <el-form-item label="操作人">
           <el-input v-model="queryParams.username" placeholder="请输入操作人" clearable @keyup.enter="handleSearch" />
         </el-form-item>
-        <el-form-item label="操作时间">
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            value-format="YYYY-MM-DD"
-            style="width: 260px"
-          />
+        <el-form-item label="操作关键词">
+          <el-input v-model="queryParams.operation" placeholder="匹配操作描述" clearable @keyup.enter="handleSearch" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
@@ -27,13 +19,13 @@
       <el-table :data="tableData" v-loading="loading" border stripe>
         <el-table-column prop="id" label="ID" width="70" align="center" />
         <el-table-column prop="username" label="操作人" width="120" />
-        <el-table-column prop="description" label="操作描述" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="operation" label="操作描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="method" label="方法" min-width="220" show-overflow-tooltip />
         <el-table-column prop="ip" label="IP" width="140" />
-        <el-table-column prop="status" label="状态" width="80" align="center">
+        <el-table-column prop="resultStatus" label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
-              {{ row.status === 1 ? '成功' : '失败' }}
+            <el-tag :type="row.resultStatus === 1 ? 'success' : 'danger'" size="small">
+              {{ row.resultStatus === 1 ? '成功' : '失败' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -43,7 +35,7 @@
             <span v-else class="no-data">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="操作时间" width="170" align="center" />
+        <el-table-column prop="operationTime" label="操作时间" width="170" align="center" />
       </el-table>
 
       <div class="pagination-wrap">
@@ -71,12 +63,9 @@ import { Search, Refresh } from '@element-plus/icons-vue'
 const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
-const dateRange = ref([])
-
 const queryParams = reactive({
   username: '',
-  startDate: '',
-  endDate: '',
+  operation: '',
   pageNum: 1,
   pageSize: 10
 })
@@ -84,14 +73,12 @@ const queryParams = reactive({
 async function fetchList() {
   loading.value = true
   try {
-    if (dateRange.value && dateRange.value.length === 2) {
-      queryParams.startDate = dateRange.value[0]
-      queryParams.endDate = dateRange.value[1]
-    } else {
-      queryParams.startDate = ''
-      queryParams.endDate = ''
-    }
-    const res = await getLogList(queryParams)
+    const res = await getLogList({
+      page: queryParams.pageNum,
+      size: queryParams.pageSize,
+      username: queryParams.username || undefined,
+      operation: queryParams.operation || undefined
+    })
     tableData.value = res.data.records || res.data.list || []
     total.value = res.data.total || 0
   } catch {
@@ -108,7 +95,7 @@ function handleSearch() {
 
 function handleReset() {
   queryParams.username = ''
-  dateRange.value = []
+  queryParams.operation = ''
   queryParams.pageNum = 1
   fetchList()
 }

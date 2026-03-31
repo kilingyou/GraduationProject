@@ -16,6 +16,7 @@
           <el-option label="已接单" value="ACCEPTED" />
           <el-option label="生产中" value="IN_PRODUCTION" />
           <el-option label="已完成" value="COMPLETED" />
+          <el-option label="已撤销" value="CANCELLED" />
         </el-select>
       </div>
     </div>
@@ -23,6 +24,7 @@
     <el-table v-loading="loading" :data="tableData" border stripe>
       <el-table-column prop="id" label="订单ID" width="80" align="center" />
       <el-table-column prop="bomName" label="BOM" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="designDocName" label="设计文档" min-width="140" show-overflow-tooltip />
       <el-table-column prop="designDocHash" label="设计文档哈希" min-width="180" show-overflow-tooltip />
       <el-table-column prop="quantity" label="数量" width="80" align="center" />
       <el-table-column prop="expectedDelivery" label="期望交期" width="120" align="center" />
@@ -89,13 +91,20 @@
           />
         </el-form-item>
         <el-form-item label="目标制造商">
-          <el-input-number
+          <el-select
             v-model="createForm.targetManufacturer"
-            :min="0"
-            placeholder="制造商ID（可选）"
+            placeholder="不选则对所有制造商可见（广播）"
+            clearable
+            filterable
             style="width: 100%"
-            controls-position="right"
-          />
+          >
+            <el-option
+              v-for="m in manufacturerOptions"
+              :key="m.id"
+              :label="m.label"
+              :value="m.id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -115,7 +124,8 @@
         </el-descriptions-item>
         <el-descriptions-item label="BOM名称">{{ detail.bomName }}</el-descriptions-item>
         <el-descriptions-item label="生产数量">{{ detail.quantity }}</el-descriptions-item>
-        <el-descriptions-item label="设计文档哈希" :span="2">{{ detail.designDocHash }}</el-descriptions-item>
+        <el-descriptions-item label="设计文档">{{ detail.designDocName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="设计文档哈希">{{ detail.designDocHash || '-' }}</el-descriptions-item>
         <el-descriptions-item label="期望交期">{{ detail.expectedDelivery }}</el-descriptions-item>
         <el-descriptions-item label="目标制造商">{{ detail.targetManufacturerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="质量要求" :span="2">{{ detail.qualityRequirement }}</el-descriptions-item>
@@ -128,16 +138,23 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { createProductionOrder, getProductionOrderList, getProductionOrderDetail } from '@/api/supplier'
+import {
+  createProductionOrder,
+  getProductionOrderList,
+  getProductionOrderDetail,
+  cancelProductionOrder,
+  listManufacturerOptions
+} from '@/api/supplier'
 import { getBomList } from '@/api/supplier'
 
 const STATUS_MAP = {
   PENDING_ACCEPTANCE: { label: '待接单', type: 'warning' },
   ACCEPTED: { label: '已接单', type: '' },
   IN_PRODUCTION: { label: '生产中', type: 'info' },
-  COMPLETED: { label: '已完成', type: 'success' }
+  COMPLETED: { label: '已完成', type: 'success' },
+  CANCELLED: { label: '已撤销', type: 'info' }
 }
 
 function statusLabel(status) {
@@ -156,6 +173,7 @@ const detailDialogVisible = ref(false)
 const detail = ref({})
 const createFormRef = ref()
 const bomOptions = ref([])
+const manufacturerOptions = ref([])
 
 const queryParams = reactive({
   status: '',
@@ -206,8 +224,18 @@ async function fetchBomOptions() {
   }
 }
 
+async function fetchManufacturers() {
+  try {
+    const res = await listManufacturerOptions()
+    manufacturerOptions.value = res.data || []
+  } catch {
+    manufacturerOptions.value = []
+  }
+}
+
 function openCreateDialog() {
   fetchBomOptions()
+  fetchManufacturers()
   createDialogVisible.value = true
 }
 
@@ -242,6 +270,19 @@ async function handleView(row) {
     detailDialogVisible.value = true
   } catch {
     ElMessage.error('获取订单详情失败')
+  }
+}
+
+async function handleCancel(row) {
+  try {
+    await ElMessageBox.confirm('确认撤销该订单？撤销后制造商将无法再接单。', '撤销订单', { type: 'warning' })
+    await cancelProductionOrder(row.id)
+    ElMessage.success('已撤销')
+    fetchList()
+  } catch (err) {
+    if (err !== 'cancel') {
+      /* 错误由拦截器或后端消息处理 */
+    }
   }
 }
 

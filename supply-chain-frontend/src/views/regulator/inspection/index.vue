@@ -76,7 +76,7 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="报告哈希" prop="reportHash">
-          <el-input v-model="resultForm.reportHash" placeholder="填写官方检测报告 SHA-256 哈希" />
+          <el-input v-model="resultForm.reportHash" placeholder="由系统上传后自动计算" disabled />
         </el-form-item>
         <el-form-item label="报告 CID" prop="reportCid">
           <el-upload
@@ -85,7 +85,7 @@
             :file-list="reportFiles"
             :on-change="handleReportFileChange"
           >
-            <div class="el-upload__text">选择报告文件（本版本仅记录文件名作为 CID 占位）</div>
+            <div class="el-upload__text">选择官方检测报告文件（将上传至 IPFS 并计算 SHA-256）</div>
           </el-upload>
           <div class="cid-hint" v-if="resultForm.reportCid">当前：{{ resultForm.reportCid }}</div>
         </el-form-item>
@@ -105,7 +105,7 @@ import { ElMessage } from 'element-plus'
 import {
   createInspection,
   getInspectionList,
-  submitInspectionResult
+  submitInspectionResultMultipart
 } from '@/api/regulator'
 
 const loading = ref(false)
@@ -142,8 +142,7 @@ const resultForm = reactive({
 
 const resultRules = {
   inspectionResult: [{ required: true, message: '请选择检测结果', trigger: 'change' }],
-  reportHash: [{ required: true, message: '请填写报告哈希', trigger: 'blur' }],
-  reportCid: [{ required: true, message: '请填写报告 CID（可用文件名占位）', trigger: 'blur' }]
+  reportCid: [{ required: true, message: '请上传官方检测报告文件', trigger: 'change' }]
 }
 
 const reportFiles = ref([])
@@ -198,10 +197,24 @@ async function submitResult() {
   if (!resultFormRef.value) return
   await resultFormRef.value.validate()
   if (!currentResultId.value) return
+  const first = reportFiles.value?.[0]
+  if (!first?.raw) {
+    ElMessage.warning('请上传官方检测报告文件')
+    return
+  }
 
   resultSubmitting.value = true
   try {
-    await submitInspectionResult(currentResultId.value, resultForm)
+    const fd = new FormData()
+    fd.append('inspectionResult', resultForm.inspectionResult)
+    fd.append('reportFile', first.raw)
+    if (resultForm.inspectorSign) fd.append('inspectorSign', resultForm.inspectorSign)
+    const res = await submitInspectionResultMultipart(currentResultId.value, fd)
+    // 回填后端计算结果
+    if (res?.data) {
+      resultForm.reportHash = res.data.reportHash || ''
+      resultForm.reportCid = res.data.reportCid || resultForm.reportCid
+    }
     ElMessage.success('检测结果已提交')
     resultVisible.value = false
     await fetchList()

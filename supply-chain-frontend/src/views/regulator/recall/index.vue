@@ -14,7 +14,33 @@
           style="max-width: 360px"
         />
         <el-button type="success" :loading="analyzing" @click="handleAnalyze">分析影响范围</el-button>
+        <el-button :disabled="!analysisSn" @click="handleExportEvidence">导出证据包(JSON)</el-button>
+        <el-button :disabled="!analysisSn" @click="handleExportEvidencePdf">导出证据包(PDF)</el-button>
+        <el-button type="warning" :disabled="!analysisSn" @click="handleAnomaly">异常监控分析</el-button>
       </div>
+
+      <el-card shadow="never" class="analysis-card">
+        <template #header>
+          <div class="section-title">自动任务状态</div>
+        </template>
+        <el-descriptions :column="2" border size="small" v-if="schedulerStatus">
+          <el-descriptions-item label="是否启用">{{ schedulerStatus.enabled ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="扫描间隔(ms)">{{ schedulerStatus.intervalMs }}</el-descriptions-item>
+          <el-descriptions-item label="投诉阈值">{{ schedulerStatus.thresholdCount }}</el-descriptions-item>
+          <el-descriptions-item label="窗口(分钟)">{{ schedulerStatus.thresholdWindowMinutes }}</el-descriptions-item>
+          <el-descriptions-item label="投诉通告默认状态">{{ schedulerStatus.defaultNoticeStatusForComplaints }}</el-descriptions-item>
+          <el-descriptions-item label="累计运行次数">{{ schedulerStatus.totalRuns }}</el-descriptions-item>
+          <el-descriptions-item label="投诉触发通告">{{ schedulerStatus.createdFromComplaints }}</el-descriptions-item>
+          <el-descriptions-item label="抽检触发通告">{{ schedulerStatus.createdFromInspections }}</el-descriptions-item>
+          <el-descriptions-item label="最近运行">{{ schedulerStatus.lastRunAt || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="最近成功">{{ schedulerStatus.lastSuccessAt || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="最近错误" :span="2">{{ schedulerStatus.lastError || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <div class="analysis-area">
+          <el-button type="warning" :loading="runningNow" @click="handleRunNow">立即执行一次</el-button>
+          <el-button @click="loadSchedulerStatus">刷新状态</el-button>
+        </div>
+      </el-card>
 
       <el-card v-if="analysis" class="analysis-card" shadow="never">
         <el-descriptions :column="2" border size="small">
@@ -27,6 +53,26 @@
           <div class="ecid-title">涉及部件 ECID（占位展示）</div>
           <div class="ecid-content">{{ safeEcids }}</div>
         </div>
+      </el-card>
+
+      <el-card v-if="anomaly" class="analysis-card" shadow="never">
+        <template #header>
+          <div class="section-title">串货/异常监控</div>
+        </template>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="SN">{{ anomaly.sn }}</el-descriptions-item>
+          <el-descriptions-item label="风险等级">
+            <el-tag :type="anomaly.riskLevel === 'HIGH' ? 'danger' : anomaly.riskLevel === 'MEDIUM' ? 'warning' : 'success'">
+              {{ anomaly.riskLevel }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="物流事件数">{{ anomaly.transferCount }}</el-descriptions-item>
+          <el-descriptions-item label="绑定人数">{{ anomaly.bindCount }}</el-descriptions-item>
+          <el-descriptions-item label="风险标记" :span="2">
+            <el-tag v-for="flag in (anomaly.riskFlags || [])" :key="flag" class="mr-8" type="danger">{{ flag }}</el-tag>
+            <span v-if="!anomaly.riskFlags || !anomaly.riskFlags.length">无</span>
+          </el-descriptions-item>
+        </el-descriptions>
       </el-card>
     </el-card>
 
@@ -87,8 +133,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   analyzeRecall,
+  analyzeAnomaly,
   createRecallNotice,
-  getRecallNoticeList
+  getRecallNoticeList,
+  exportRecallEvidence,
+  exportRecallEvidencePdf,
+  getRecallSchedulerStatus,
+  runRecallSchedulerNow
 } from '@/api/regulator'
 
 const loading = ref(false)
@@ -100,6 +151,9 @@ const tableData = ref([])
 const analyzing = ref(false)
 const analysis = ref(null)
 const analysisSn = ref('')
+const anomaly = ref(null)
+const schedulerStatus = ref(null)
+const runningNow = ref(false)
 
 const safeEcids = computed(() => {
   const v = analysis.value?.ecidList
@@ -122,14 +176,94 @@ async function handleAnalyze() {
     const res = await analyzeRecall(analysisSn.value)
     analysis.value = res.data || null
     // 带入批次字段（如果分析结果包含 batchNo）
-    if (analysis.value?.batchNo) {
+    if (analysis.value?.faultBatchId) {
+      createForm.faultBatchId = analysis.value.faultBatchId
+    } else if (analysis.value?.batchNo) {
       createForm.faultBatchId = analysis.value.batchNo
     }
+    createForm.faultEcid = analysis.value?.faultEcid || ''
     createForm.faultSourceSn = analysis.value?.sn || analysisSn.value
   } catch {
     ElMessage.error('分析失败')
   } finally {
     analyzing.value = false
+  }
+}
+
+async function handleExportEvidence() {
+  if (!analysisSn.value) {
+    ElMessage.warning('请先输入 SN')
+    return
+  }
+  try {
+    const res = await exportRecallEvidence(analysisSn.value)
+    const data = res.data || {}
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `evidence-${analysisSn.value}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('证据包已导出')
+  } catch {
+    ElMessage.error('导出失败')
+  }
+}
+
+async function handleExportEvidencePdf() {
+  if (!analysisSn.value) {
+    ElMessage.warning('请先输入 SN')
+    return
+  }
+  try {
+    const blob = await exportRecallEvidencePdf(analysisSn.value)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `evidence-${analysisSn.value}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('PDF 证据包已导出')
+  } catch {
+    ElMessage.error('PDF 导出失败')
+  }
+}
+
+async function handleAnomaly() {
+  if (!analysisSn.value) {
+    ElMessage.warning('请先输入 SN')
+    return
+  }
+  try {
+    const res = await analyzeAnomaly(analysisSn.value)
+    anomaly.value = res.data || null
+    ElMessage.success('异常分析完成')
+  } catch {
+    ElMessage.error('异常分析失败')
+  }
+}
+
+async function loadSchedulerStatus() {
+  try {
+    const res = await getRecallSchedulerStatus()
+    schedulerStatus.value = res.data || null
+  } catch {
+    schedulerStatus.value = null
+  }
+}
+
+async function handleRunNow() {
+  runningNow.value = true
+  try {
+    await runRecallSchedulerNow()
+    ElMessage.success('已触发自动任务')
+    await loadSchedulerStatus()
+    await fetchList()
+  } catch {
+    ElMessage.error('触发失败')
+  } finally {
+    runningNow.value = false
   }
 }
 
@@ -154,7 +288,8 @@ const createRules = {
 function openCreate() {
   if (analysis.value) {
     createForm.faultSourceSn = analysis.value?.sn || analysisSn.value
-    createForm.faultBatchId = analysis.value?.batchNo || createForm.faultBatchId
+    createForm.faultBatchId = analysis.value?.faultBatchId || analysis.value?.batchNo || createForm.faultBatchId
+    createForm.faultEcid = analysis.value?.faultEcid || createForm.faultEcid
   } else {
     createForm.faultSourceSn = analysisSn.value
   }
@@ -198,6 +333,7 @@ async function fetchList() {
 }
 
 onMounted(() => {
+  loadSchedulerStatus()
   fetchList()
 })
 </script>
@@ -239,6 +375,11 @@ onMounted(() => {
 
 .analysis-card {
   border-radius: 10px;
+}
+
+.mr-8 {
+  margin-right: 8px;
+  margin-bottom: 6px;
 }
 
 .ecid-list {

@@ -24,6 +24,10 @@ export function submitInspectionResult(id, data) {
   return request({ url: `/regulator/inspection/${id}/result`, method: 'put', data })
 }
 
+export function submitInspectionResultMultipart(id, formData) {
+  return request({ url: `/regulator/inspection/${id}/result`, method: 'put', data: formData })
+}
+
 export function createRecallNotice(data) {
   return request({ url: '/regulator/recall', method: 'post', data })
 }
@@ -34,4 +38,32 @@ export function getRecallNoticeList(params) {
 
 export function analyzeRecall(sn) {
   return request({ url: `/regulator/recall/analyze/${sn}`, method: 'get' })
+}
+
+export function exportRecallEvidence(sn) {
+  return request({ url: `/regulator/recall/evidence/${sn}`, method: 'get' })
+}
+
+export function exportRecallEvidencePdf(sn) {
+  return request({
+    url: `/regulator/recall/evidence/${sn}/pdf`,
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
+export function analyzeAnomaly(sn) {
+  return request({ url: `/regulator/recall/anomaly/${sn}`, method: 'get' })
+}
+
+export function getRecentAnomalies(params) {
+  return request({ url: '/regulator/recall/anomalies/recent', method: 'get', params })
+}
+
+export function getRecallSchedulerStatus() {
+  return request({ url: '/regulator/recall/scheduler/status', method: 'get' })
+}
+
+export function runRecallSchedulerNow() {
+  return request({ url: '/regulator/recall/scheduler/run', method: 'post' })
 }

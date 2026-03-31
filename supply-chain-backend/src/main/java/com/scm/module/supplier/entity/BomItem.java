@@ -3,6 +3,7 @@ package com.scm.module.supplier.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -16,8 +17,10 @@ public class BomItem {
 
     private Long bomId;
 
+    @JsonAlias("materialName")
     private String partName;
 
+    @JsonAlias("materialCode")
     private String partNumber;
 
     private String specification;

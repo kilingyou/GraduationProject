@@ -96,6 +96,8 @@ export const constantRoutes = [
     component: Layout,
     meta: { title: '终端用户', icon: 'UserFilled' },
     children: [
+      { path: 'trace', name: 'EnduserTrace', component: () => import('@/views/enduser/trace/index.vue'), meta: { title: '溯源查询', icon: 'Search' } },
+      { path: 'bind', name: 'ProductBind', component: () => import('@/views/enduser/bind/index.vue'), meta: { title: '产品绑定', icon: 'Link' } },
       { path: 'complaint', name: 'Complaint', component: () => import('@/views/enduser/complaint/index.vue'), meta: { title: '投诉反馈', icon: 'ChatDotRound' } },
       { path: 'decommission', name: 'Decommission', component: () => import('@/views/enduser/decommission/index.vue'), meta: { title: '报废登记', icon: 'Delete' } }
     ]
@@ -108,6 +110,7 @@ export const constantRoutes = [
       { path: 'audit', name: 'SupplierAudit', component: () => import('@/views/regulator/audit/index.vue'), meta: { title: '资质审核', icon: 'Stamp' } },
       { path: 'inspection', name: 'Inspection', component: () => import('@/views/regulator/inspection/index.vue'), meta: { title: '抽检任务', icon: 'FirstAidKit' } },
       { path: 'recall', name: 'Recall', component: () => import('@/views/regulator/recall/index.vue'), meta: { title: '召回管理', icon: 'WarningFilled' } },
+      { path: 'anomaly', name: 'RegAnomaly', component: () => import('@/views/regulator/anomaly/index.vue'), meta: { title: '串货监控', icon: 'Histogram' } },
       { path: 'log', name: 'AuditLog', component: () => import('@/views/regulator/log/index.vue'), meta: { title: '审计日志', icon: 'Notebook' } }
     ]
   }
@@ -125,6 +128,11 @@ router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
 
   if (whiteList.some(path => to.path.startsWith(path))) {
+    if ((to.path === '/login' || to.path === '/register') && userStore.token) {
+      const r = to.query.redirect
+      next(typeof r === 'string' && r ? r : '/dashboard')
+      return
+    }
     next()
     return
   }

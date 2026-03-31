@@ -16,6 +16,10 @@ export function createBatch(data) {
   return request({ url: '/manufacturer/production/batch', method: 'post', data })
 }
 
+export function completeProductionBatch(batchId) {
+  return request({ url: '/manufacturer/production/batch/complete', method: 'post', data: { batchId } })
+}
+
 export function getBatchList(params) {
   return request({ url: '/manufacturer/production/batch/list', method: 'get', params })
 }
@@ -28,10 +32,7 @@ export function getEcidList(params) {
   return request({ url: '/manufacturer/production/ecid/list', method: 'get', params })
 }
 
-export function exportEcids(data) {
-  return request({ url: '/manufacturer/production/ecid/export', method: 'post', data })
-}
-
+/** 批量注册：传 { ids: number[] } 或 { ecids: string[] } */
 export function registerEcids(data) {
   return request({ url: '/manufacturer/production/ecid/register', method: 'post', data })
 }
@@ -50,4 +51,12 @@ export function rejectDevice(data) {
 
 export function getQualityReportList(params) {
   return request({ url: '/manufacturer/quality/report/list', method: 'get', params })
+}
+
+export function getManufacturerDashboardStats() {
+  return request({ url: '/manufacturer/dashboard/stats', method: 'get' })
+}
+
+export function lookupManufacturerDevice(ecid) {
+  return request({ url: '/manufacturer/dashboard/device-lookup', method: 'get', params: { ecid } })
 }

@@ -90,7 +90,9 @@
               选择文件
             </el-button>
             <template #tip>
-              <div class="el-upload__tip">支持 PDF/JPG/PNG，最多3个文件</div>
+              <div class="el-upload__tip">
+                支持 PDF/JPG/PNG，最多 3 个文件。第 1 个存为营业执照哈希与 IPFS，第 2 个存为资质证书（可选）；其余文件当前版本忽略。
+              </div>
             </template>
           </el-upload>
         </el-form-item>

@@ -11,12 +11,21 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :span="8">
         <el-card shadow="hover" class="action-card" @click="receiveDialogVisible = true">
           <el-icon :size="36" color="#67c23a"><Box /></el-icon>
           <div class="action-card__text">
             <h3>确认收货</h3>
             <p>确认物流接收</p>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card shadow="hover" class="action-card" @click="batchDialogVisible = true">
+          <el-icon :size="36" color="#e6a23c"><List /></el-icon>
+          <div class="action-card__text">
+            <h3>批量发货</h3>
+            <p>Excel 装箱单（表头 SN）</p>
           </div>
         </el-card>
       </el-col>
@@ -63,10 +72,10 @@
         </div>
       </template>
       <el-table :data="transferList" v-loading="listLoading" border stripe>
-        <el-table-column prop="logisticsNo" label="物流单号" width="180" />
+        <el-table-column prop="trackingNumber" label="物流单号" width="180" />
         <el-table-column prop="sn" label="产品SN" width="180" />
-        <el-table-column prop="sender" label="发送方" width="140" />
-        <el-table-column prop="receiver" label="接收方" width="140" />
+        <el-table-column prop="senderId" label="发货方ID" width="100" />
+        <el-table-column prop="receiverId" label="收货方ID" width="100" />
         <el-table-column prop="type" label="类型" width="100" align="center">
           <template #default="{ row }">
             <el-tag size="small">{{ row.type }}</el-tag>
@@ -78,7 +87,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="shipTime" label="发货时间" width="180" />
-        <el-table-column prop="arriveTime" label="到达时间" width="180" />
+        <el-table-column prop="actualArrival" label="到达时间" width="180" />
       </el-table>
       <el-pagination
         class="mt-16"
@@ -105,7 +114,7 @@
           <el-input v-model="shipForm.trackingNo" placeholder="请输入物流单号" />
         </el-form-item>
         <el-form-item label="接收方ID" prop="receiverId">
-          <el-input v-model="shipForm.receiverId" placeholder="接收方用户ID" />
+          <el-input-number v-model="shipForm.receiverId" :min="1" :controls="false" placeholder="系统用户ID" style="width: 100%" />
         </el-form-item>
         <el-form-item label="发货时间" prop="shipTime">
           <el-date-picker
@@ -119,6 +128,37 @@
       <template #footer>
         <el-button @click="shipDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="shipSubmitting" @click="handleShip">确认发货</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Batch ship -->
+    <el-dialog v-model="batchDialogVisible" title="Excel 批量发货" width="560px" destroy-on-close>
+      <el-form label-width="100px">
+        <el-form-item label="物流公司" required>
+          <el-input v-model="batchForm.logisticsCompany" placeholder="与单件发货一致" />
+        </el-form-item>
+        <el-form-item label="物流单号" required>
+          <el-input v-model="batchForm.trackingNo" placeholder="整批共用单号" />
+        </el-form-item>
+        <el-form-item label="接收方ID" required>
+          <el-input-number v-model="batchForm.receiverId" :min="1" :controls="false" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="装箱单">
+          <el-upload
+            :auto-upload="false"
+            :limit="1"
+            accept=".xlsx,.xls"
+            :on-change="f => (batchFile = f.raw)"
+            :on-exceed="() => ElMessage.warning('只能上传一个文件')"
+          >
+            <el-button>选择 Excel</el-button>
+          </el-upload>
+          <el-button type="primary" link style="margin-left: 8px" @click="downloadBatchTpl">下载模板</el-button>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchSubmitting" @click="handleBatchShip">提交批量发货</el-button>
       </template>
     </el-dialog>
 
@@ -141,7 +181,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Van, Box, Location, List } from '@element-plus/icons-vue'
-import { shipProducts, receiveProducts, getTransferList, trackProduct } from '@/api/distributor'
+import {
+  shipProducts, receiveProducts, getTransferList, trackProduct,
+  shipBatchProducts, downloadSnShipTemplate
+} from '@/api/distributor'
 
 // ---- Transfer List ----
 const listLoading = ref(false)
@@ -162,23 +205,23 @@ async function loadTransfers() {
 }
 
 function transferStatusType(s) {
-  const m = { SHIPPED: 'warning', RECEIVED: 'success', IN_TRANSIT: '', CANCELLED: 'danger' }
+  const m = { PENDING: 'info', RECEIVED: 'success', IN_TRANSIT: 'warning', ANOMALY: 'danger' }
   return m[s] ?? 'info'
 }
 function transferStatusLabel(s) {
-  const m = { SHIPPED: '已发货', RECEIVED: '已收货', IN_TRANSIT: '运输中', CANCELLED: '已取消' }
+  const m = { PENDING: '待处理', RECEIVED: '已收货', IN_TRANSIT: '在途', ANOMALY: '异常' }
   return m[s] ?? s
 }
 
 // ---- Ship ----
 const shipDialogVisible = ref(false)
 const shipFormRef = ref()
-const shipForm = reactive({ sn: '', logisticsCompany: '', trackingNo: '', receiverId: '', shipTime: '' })
+const shipForm = reactive({ sn: '', logisticsCompany: '', trackingNo: '', receiverId: null, shipTime: null })
 const shipRules = {
   sn: [{ required: true, message: '请输入 SN', trigger: 'blur' }],
   logisticsCompany: [{ required: true, message: '请输入物流公司', trigger: 'blur' }],
   trackingNo: [{ required: true, message: '请输入物流单号', trigger: 'blur' }],
-  receiverId: [{ required: true, message: '请输入接收方ID', trigger: 'blur' }]
+  receiverId: [{ required: true, message: '请输入接收方用户ID', trigger: 'change' }]
 }
 const shipSubmitting = ref(false)
 
@@ -187,7 +230,13 @@ async function handleShip() {
   if (!valid) return
   shipSubmitting.value = true
   try {
-    await shipProducts({ ...shipForm })
+    await shipProducts({
+      sn: shipForm.sn.trim(),
+      logisticsCompany: shipForm.logisticsCompany,
+      trackingNumber: shipForm.trackingNo,
+      receiverId: shipForm.receiverId,
+      transferType: 'SHIP'
+    })
     ElMessage.success('发货成功')
     shipDialogVisible.value = false
     loadTransfers()
@@ -212,7 +261,7 @@ async function handleReceive() {
   if (!valid) return
   receiveSubmitting.value = true
   try {
-    await receiveProducts({ trackingNo: receiveForm.trackingNo })
+    await receiveProducts({ trackingNumber: receiveForm.trackingNo.trim() })
     ElMessage.success('收货确认成功')
     receiveDialogVisible.value = false
     loadTransfers()
@@ -243,6 +292,53 @@ async function handleTrack() {
     ElMessage.error(e.message || '查询失败')
   } finally {
     trackLoading.value = false
+  }
+}
+
+const batchDialogVisible = ref(false)
+const batchForm = reactive({ logisticsCompany: '', trackingNo: '', receiverId: null })
+const batchFile = ref(null)
+const batchSubmitting = ref(false)
+
+async function downloadBatchTpl() {
+  try {
+    const blob = await downloadSnShipTemplate()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'SN批量发货模板.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('下载模板失败')
+  }
+}
+
+async function handleBatchShip() {
+  if (!batchForm.logisticsCompany?.trim() || !batchForm.trackingNo?.trim() || !batchForm.receiverId) {
+    ElMessage.warning('请填写物流公司、单号与接收方ID')
+    return
+  }
+  if (!batchFile.value) {
+    ElMessage.warning('请上传 Excel')
+    return
+  }
+  batchSubmitting.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', batchFile.value)
+    fd.append('logisticsCompany', batchForm.logisticsCompany.trim())
+    fd.append('trackingNumber', batchForm.trackingNo.trim())
+    fd.append('receiverId', String(batchForm.receiverId))
+    await shipBatchProducts(fd)
+    ElMessage.success('批量发货已提交')
+    batchDialogVisible.value = false
+    batchFile.value = null
+    loadTransfers()
+  } catch (e) {
+    ElMessage.error(e.message || '批量发货失败')
+  } finally {
+    batchSubmitting.value = false
   }
 }
 

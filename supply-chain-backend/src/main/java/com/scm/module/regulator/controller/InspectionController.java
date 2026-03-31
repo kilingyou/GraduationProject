@@ -8,8 +8,12 @@ import com.scm.module.regulator.entity.InspectionTask;
 import com.scm.module.regulator.service.InspectionTaskService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/regulator/inspection")
@@ -45,6 +49,20 @@ public class InspectionController {
     public Result<InspectionTask> submitResult(@PathVariable Long id,
                                                @RequestBody InspectionTask result) {
         InspectionTask updated = inspectionTaskService.submitResult(id, result);
+        if (updated == null) {
+            return Result.fail("Inspection task not found");
+        }
+        return Result.ok(updated);
+    }
+
+    @PutMapping(value = "/{id}/result", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<InspectionTask> submitResultMultipart(
+            @PathVariable Long id,
+            @RequestParam String inspectionResult,
+            @RequestPart("reportFile") MultipartFile reportFile,
+            @RequestParam(required = false) String inspectorSign
+    ) throws IOException {
+        InspectionTask updated = inspectionTaskService.submitResult(id, inspectionResult, reportFile, inspectorSign);
         if (updated == null) {
             return Result.fail("Inspection task not found");
         }

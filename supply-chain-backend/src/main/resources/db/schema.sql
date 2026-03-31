@@ -304,6 +304,7 @@ CREATE TABLE bus_assembly_record (
     sn                VARCHAR(100) NOT NULL UNIQUE COMMENT '整机序列号',
     assembly_batch_no VARCHAR(64)  NOT NULL COMMENT '组装批次号',
     assembler_id      BIGINT       NOT NULL,
+    current_holder_id BIGINT       COMMENT '当前货权用户ID(组装完成后默认为组装商，收货后更新)',
     ecid_list         JSON         COMMENT '部件ECID列表 ["ecid1","ecid2"]',
     firmware_version  VARCHAR(100) COMMENT '固件/系统版本',
     test_report_hash  VARCHAR(128),
@@ -565,3 +566,32 @@ SELECT 5, id FROM sys_menu;
 -- 终端用户
 INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT 6, id FROM sys_menu WHERE id IN (25,26,27,28);
+
+-- 扩展：产品绑定、串货监控（亦见 db/patch-menus-feature-extension.sql，已建库可单独重复执行）
+INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, icon, sort_order)
+SELECT id, '产品绑定', '/enduser/bind', 'enduser/bind/index', 'enduser:bind:list', 'C', 'Link', 2
+FROM sys_menu
+WHERE path = '/enduser' AND parent_id = 0 AND menu_type = 'M'
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE path = '/enduser/bind')
+LIMIT 1;
+
+INSERT INTO sys_role_menu (role_id, menu_id)
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.path = '/enduser/bind'
+WHERE r.role_key = 'enduser'
+  AND NOT EXISTS (SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id);
+
+INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, icon, sort_order)
+SELECT id, '串货监控', '/regulator/anomaly', 'regulator/anomaly/index', 'regulator:anomaly:list', 'C', 'Histogram', 3
+FROM sys_menu
+WHERE path = '/regulator' AND parent_id = 0 AND menu_type = 'M'
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE path = '/regulator/anomaly')
+LIMIT 1;
+
+INSERT INTO sys_role_menu (role_id, menu_id)
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.path = '/regulator/anomaly'
+WHERE r.role_key = 'regulator'
+  AND NOT EXISTS (SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id);

@@ -3,12 +3,15 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>生产订单列表</span>
+          <el-radio-group v-model="orderScope" size="small" @change="onScopeChange">
+            <el-radio-button label="pool">订单大厅（待接单）</el-radio-button>
+            <el-radio-button label="mine">我的订单（已接单）</el-radio-button>
+          </el-radio-group>
           <el-input
             v-model="queryParams.keyword"
             placeholder="搜索订单ID / BOM名称"
             clearable
-            style="width: 260px"
+            style="width: 260px; margin-left: 16px"
             @clear="handleSearch"
             @keyup.enter="handleSearch"
           >
@@ -19,6 +22,20 @@
         </div>
       </template>
 
+      <div v-if="orderScope === 'mine'" class="filter-row">
+        <el-select
+          v-model="queryParams.status"
+          placeholder="订单状态"
+          clearable
+          style="width: 200px"
+          @change="handleSearch"
+        >
+          <el-option label="已接单" value="ACCEPTED" />
+          <el-option label="生产中" value="IN_PRODUCTION" />
+          <el-option label="已完成" value="COMPLETED" />
+        </el-select>
+      </div>
+
       <el-table
         v-loading="loading"
         :data="orderList"
@@ -27,11 +44,26 @@
         style="width: 100%"
       >
         <el-table-column prop="orderId" label="订单ID" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="bomName" label="BOM" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="quantity" label="数量" width="100" align="center" />
-        <el-table-column prop="expectedDelivery" label="期望交期" width="130" align="center" />
-        <el-table-column prop="supplierName" label="供应商" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="130" align="center">
+        <el-table-column prop="bomName" label="BOM" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="designDocName" label="设计文档" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="designDocFileHash" label="设计文档哈希" min-width="160" show-overflow-tooltip />
+        <el-table-column label="图纸" width="100" align="center">
+          <template #default="{ row }">
+            <el-link
+              v-if="row.designDocDownloadUrl"
+              type="primary"
+              :href="row.designDocDownloadUrl"
+              target="_blank"
+            >
+              下载
+            </el-link>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="quantity" label="数量" width="90" align="center" />
+        <el-table-column prop="expectedDelivery" label="期望交期" width="120" align="center" />
+        <el-table-column prop="supplierEnterpriseName" label="供应商" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="status" label="状态" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)" effect="plain">
               {{ statusLabel(row.status) }}
@@ -49,7 +81,7 @@
               接单
             </el-button>
             <el-button
-              v-if="row.status === 'ACCEPTED' || row.status === 'IN_PRODUCTION'"
+              v-if="row.status === 'ACCEPTED' || row.status === 'IN_PRODUCTION' || row.status === 'COMPLETED'"
               type="success"
               link
               @click="openAgreementDialog(row)"
@@ -74,8 +106,7 @@
       </div>
     </el-card>
 
-    <!-- 接单对话框 -->
-    <el-dialog v-model="acceptVisible" title="确认接单" width="520px" destroy-on-close>
+    <el-dialog v-model="acceptVisible" title="签署制造协议并接单" width="520px" destroy-on-close>
       <el-form
         ref="acceptFormRef"
         :model="acceptForm"
@@ -108,9 +139,9 @@
             :limit="1"
             accept=".pdf,.doc,.docx"
           >
-            <el-button type="primary" plain>选择文件</el-button>
+            <el-button type="primary" plain>选择协议文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">支持 PDF / Word，可选上传</div>
+              <div class="el-upload__tip">按需求上传已协商定稿的《生产制造协议》，将存 IPFS 并记录哈希</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -123,22 +154,27 @@
       </template>
     </el-dialog>
 
-    <!-- 协议详情对话框 -->
-    <el-dialog v-model="agreementVisible" title="协议详情" width="600px" destroy-on-close>
+    <el-dialog v-model="agreementVisible" title="制造协议" width="640px" destroy-on-close>
       <el-descriptions v-if="agreement" :column="1" border>
         <el-descriptions-item label="订单ID">{{ agreement.orderId }}</el-descriptions-item>
         <el-descriptions-item label="最终价格">¥{{ agreement.finalPrice }}</el-descriptions-item>
-        <el-descriptions-item label="交付日期">{{ agreement.deliveryDate }}</el-descriptions-item>
-        <el-descriptions-item label="协议哈希">
+        <el-descriptions-item label="承诺交期">{{ agreement.deliveryDate }}</el-descriptions-item>
+        <el-descriptions-item label="协议文件哈希">
           <el-text class="hash-text" truncated>{{ agreement.agreementHash || '-' }}</el-text>
         </el-descriptions-item>
+        <el-descriptions-item label="协议 IPFS CID">
+          <el-text class="hash-text" truncated>{{ agreement.agreementCid || '-' }}</el-text>
+        </el-descriptions-item>
+        <el-descriptions-item label="链上交易哈希">
+          <el-text class="hash-text" truncated>{{ agreement.txHash || '-' }}</el-text>
+        </el-descriptions-item>
         <el-descriptions-item label="供应商签名">
-          <el-text class="hash-text" truncated>{{ agreement.supplierSignature || '-' }}</el-text>
+          <el-text class="hash-text" truncated>{{ agreement.supplierSign || '-' }}</el-text>
         </el-descriptions-item>
         <el-descriptions-item label="制造商签名">
-          <el-text class="hash-text" truncated>{{ agreement.manufacturerSignature || '-' }}</el-text>
+          <el-text class="hash-text" truncated>{{ agreement.manufacturerSign || '-' }}</el-text>
         </el-descriptions-item>
-        <el-descriptions-item label="签署时间">{{ agreement.signedAt || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ agreement.createTime || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-empty v-else description="暂无协议信息" />
     </el-dialog>
@@ -156,7 +192,7 @@ const STATUS_MAP = {
   ACCEPTED: { label: '已接单', type: 'success' },
   IN_PRODUCTION: { label: '生产中', type: '' },
   COMPLETED: { label: '已完成', type: 'info' },
-  CANCELLED: { label: '已取消', type: 'danger' }
+  CANCELLED: { label: '已撤销', type: 'danger' }
 }
 
 const statusLabel = (s) => STATUS_MAP[s]?.label || s
@@ -166,20 +202,35 @@ const loading = ref(false)
 const submitting = ref(false)
 const orderList = ref([])
 const total = ref(0)
+const orderScope = ref('pool')
 
 const queryParams = reactive({
   keyword: '',
   page: 1,
-  pageSize: 10
+  pageSize: 10,
+  status: ''
 })
+
+function onScopeChange() {
+  queryParams.page = 1
+  queryParams.status = ''
+  fetchOrders()
+}
 
 async function fetchOrders() {
   loading.value = true
   try {
-    const { data } = await getOrderList(queryParams)
+    const params = {
+      scope: orderScope.value,
+      page: queryParams.page,
+      pageSize: queryParams.pageSize
+    }
+    if (queryParams.keyword) params.keyword = queryParams.keyword
+    if (orderScope.value === 'mine' && queryParams.status) params.status = queryParams.status
+    const { data } = await getOrderList(params)
     orderList.value = data.records ?? data.list ?? []
     total.value = data.total ?? 0
-  } catch { /* handled by interceptor */ } finally {
+  } catch { /* interceptor */ } finally {
     loading.value = false
   }
 }
@@ -189,7 +240,6 @@ function handleSearch() {
   fetchOrders()
 }
 
-// --- Accept order ---
 const acceptVisible = ref(false)
 const acceptFormRef = ref(null)
 const currentOrder = ref(null)
@@ -229,12 +279,11 @@ async function handleAccept() {
     ElMessage.success('接单成功')
     acceptVisible.value = false
     fetchOrders()
-  } catch { /* handled by interceptor */ } finally {
+  } catch { /* interceptor */ } finally {
     submitting.value = false
   }
 }
 
-// --- Agreement ---
 const agreementVisible = ref(false)
 const agreement = ref(null)
 
@@ -244,7 +293,7 @@ async function openAgreementDialog(row) {
   try {
     const { data } = await getAgreement(row.orderId)
     agreement.value = data
-  } catch { /* handled by interceptor */ }
+  } catch { /* interceptor */ }
 }
 
 onMounted(fetchOrders)
@@ -254,8 +303,16 @@ onMounted(fetchOrders)
 .order-container {
   .card-header {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
     align-items: center;
+  }
+
+  .filter-row {
+    margin-bottom: 12px;
+  }
+
+  .text-muted {
+    color: #c0c4cc;
   }
 
   .pagination-wrapper {

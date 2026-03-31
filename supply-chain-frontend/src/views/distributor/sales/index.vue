@@ -13,7 +13,7 @@
         <el-table-column prop="sn" label="SN" width="200" />
         <el-table-column prop="saleTime" label="销售时间" width="180" />
         <el-table-column prop="customerHash" label="客户哈希" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="store" label="门店" width="140" />
+        <el-table-column prop="invoiceHash" label="发票哈希" min-width="200" show-overflow-tooltip />
         <el-table-column prop="txHash" label="交易哈希" min-width="200" show-overflow-tooltip />
       </el-table>
       <el-pagination
