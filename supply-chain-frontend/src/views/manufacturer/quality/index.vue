@@ -60,6 +60,13 @@
               />
             </el-form-item>
 
+            <el-form-item v-if="qcForm.result === 'FAIL'" label="后续处置" prop="disposalType">
+              <el-radio-group v-model="qcForm.disposalType">
+                <el-radio value="RETURN">退货至供应商（供应商在「不合格处置」确认收讫）</el-radio>
+                <el-radio value="DESTROY">就地销毁（本企业在下方列表确认销毁完成）</el-radio>
+              </el-radio-group>
+            </el-form-item>
+
             <el-form-item>
               <el-button
                 v-if="qcForm.result === 'PASS'"
@@ -79,6 +86,53 @@
               </el-button>
             </el-form-item>
           </el-form>
+        </el-tab-pane>
+
+        <!-- 不合格处置跟踪 -->
+        <el-tab-pane label="不合格处置" name="rejectDisposition">
+          <el-table v-loading="rejectLoading" :data="rejectList" border stripe>
+            <el-table-column prop="orderId" label="订单号" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="ecid" label="ECID" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="disposalType" label="处置方式" width="100" align="center">
+              <template #default="{ row }">
+                {{ row.disposalType === 'RETURN' ? '退货' : row.disposalType === 'DESTROY' ? '销毁' : row.disposalType }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="disposalStatus" label="状态" width="150" align="center">
+              <template #default="{ row }">
+                <el-tag :type="rejTag(row.disposalStatus)" effect="plain">
+                  {{ rejLabel(row.disposalStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="reason" label="原因" min-width="140" show-overflow-tooltip />
+            <el-table-column label="操作" width="130" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  v-if="row.disposalType === 'DESTROY' && row.disposalStatus === 'AWAITING_MFG_DESTROY'"
+                  type="danger"
+                  link
+                  :loading="destroyingId === row.id"
+                  @click="onConfirmDestroy(row)"
+                >
+                  确认已销毁
+                </el-button>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="pagination-wrapper">
+            <el-pagination
+              v-model:current-page="rejectQuery.pageNum"
+              v-model:page-size="rejectQuery.pageSize"
+              :total="rejectTotal"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              @size-change="fetchRejectList"
+              @current-change="fetchRejectList"
+            />
+          </div>
         </el-tab-pane>
 
         <!-- 质检报告列表 -->
@@ -134,7 +188,12 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  uploadQualityReport, completeProduction, rejectDevice, getQualityReportList
+  uploadQualityReport,
+  completeProduction,
+  rejectDevice,
+  getQualityReportList,
+  getRejectRecordList,
+  confirmRejectDestroy
 } from '@/api/manufacturer'
 
 const activeTab = ref('operation')
@@ -149,14 +208,16 @@ const qcForm = reactive({
   targetId: '',
   fileList: [],
   result: 'PASS',
-  reason: ''
+  reason: '',
+  disposalType: 'RETURN'
 })
 
 const qcRules = {
   targetType: [{ required: true, message: '请选择目标类型', trigger: 'change' }],
   targetId: [{ required: true, message: '请输入目标标识', trigger: 'blur' }],
   result: [{ required: true, message: '请选择检测结果', trigger: 'change' }],
-  reason: [{ required: true, message: '请输入不合格原因', trigger: 'blur' }]
+  reason: [{ required: true, message: '请输入不合格原因', trigger: 'blur' }],
+  disposalType: [{ required: true, message: '请选择处置方式', trigger: 'change' }]
 }
 
 function resetForm() {
@@ -164,6 +225,7 @@ function resetForm() {
   qcForm.fileList = []
   qcForm.result = 'PASS'
   qcForm.reason = ''
+  qcForm.disposalType = 'RETURN'
   qcFormRef.value?.clearValidate()
 }
 
@@ -213,7 +275,8 @@ async function handleFail() {
     await rejectDevice({
       targetType: qcForm.targetType,
       targetId: qcForm.targetId,
-      reason: qcForm.reason
+      reason: qcForm.reason,
+      disposalType: qcForm.disposalType
     })
     ElMessage.success('已标记不合格')
     resetForm()
@@ -240,8 +303,62 @@ async function fetchReports() {
   }
 }
 
+const rejectLoading = ref(false)
+const rejectList = ref([])
+const rejectTotal = ref(0)
+const rejectQuery = reactive({ pageNum: 1, pageSize: 10 })
+const destroyingId = ref(null)
+
+function rejLabel(s) {
+  const m = {
+    AWAITING_SUPPLIER: '待供应商确认退货',
+    AWAITING_MFG_DESTROY: '待确认销毁',
+    COMPLETED: '已完结'
+  }
+  return m[s] || s || '-'
+}
+
+function rejTag(s) {
+  if (s === 'COMPLETED') return 'success'
+  if (s === 'AWAITING_MFG_DESTROY') return 'danger'
+  if (s === 'AWAITING_SUPPLIER') return 'warning'
+  return 'info'
+}
+
+async function fetchRejectList() {
+  rejectLoading.value = true
+  try {
+    const { data } = await getRejectRecordList(rejectQuery)
+    rejectList.value = data.records ?? data.list ?? []
+    rejectTotal.value = data.total ?? 0
+  } catch { /* interceptor */ } finally {
+    rejectLoading.value = false
+  }
+}
+
+async function onConfirmDestroy(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确认 ECID ${row.ecid} 已按规范完成销毁？确认后将上链登记。`,
+      '销毁确认',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  destroyingId.value = row.id
+  try {
+    await confirmRejectDestroy({ id: row.id })
+    ElMessage.success('已确认销毁并上链')
+    fetchRejectList()
+  } catch { /* interceptor */ } finally {
+    destroyingId.value = null
+  }
+}
+
 watch(activeTab, (val) => {
   if (val === 'reports') fetchReports()
+  if (val === 'rejectDisposition') fetchRejectList()
 })
 
 onMounted(fetchReports)
@@ -258,6 +375,10 @@ onMounted(fetchReports)
   .hash-text {
     font-family: monospace;
     font-size: 12px;
+  }
+
+  .text-muted {
+    color: #c0c4cc;
   }
 }
 </style>

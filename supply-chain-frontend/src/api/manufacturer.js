@@ -62,6 +62,14 @@ export function getQualityReportList(params) {
   return request({ url: '/manufacturer/quality/report/list', method: 'get', params })
 }
 
+export function getRejectRecordList(params) {
+  return request({ url: '/manufacturer/quality/reject-record/list', method: 'get', params })
+}
+
+export function confirmRejectDestroy(data) {
+  return request({ url: '/manufacturer/quality/reject-record/confirm-destroy', method: 'post', data })
+}
+
 export function getManufacturerDashboardStats() {
   return request({ url: '/manufacturer/dashboard/stats', method: 'get' })
 }

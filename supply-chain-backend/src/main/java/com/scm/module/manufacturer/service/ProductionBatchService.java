@@ -26,4 +26,10 @@ public interface ProductionBatchService extends IService<ProductionBatch> {
      * 若本批次下全部 ECID 已上链且为质检通过状态，且数量满足计划，则自动标记批次完工并视情况完结订单（不抛业务异常）。
      */
     void tryAutoCompleteBatch(String batchId, Long manufacturerId);
+
+    /**
+     * 按本批次下已生成的设备条数刷新「完成数量」（不超过计划数量）；批次已 COMPLETED 时不修改。
+     * 用于生成 ECID 后与列表展示一致；真正「批次完工」仍以状态与链上/质检条件为准。
+     */
+    void refreshCompletedQtyFromDevices(String batchId);
 }

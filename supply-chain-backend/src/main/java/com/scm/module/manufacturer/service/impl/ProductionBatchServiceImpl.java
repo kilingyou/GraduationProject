@@ -21,6 +21,7 @@ import com.scm.module.supplier.service.ProductionRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -112,6 +113,29 @@ public class ProductionBatchServiceImpl
                 .eq(ProductionBatch::getManufacturerId, manufacturerId)
                 .orderByDesc(ProductionBatch::getCreateTime);
         return page(page, w);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void refreshCompletedQtyFromDevices(String batchId) {
+        if (!StringUtils.hasText(batchId)) {
+            return;
+        }
+        ProductionBatch batch = getOne(new LambdaQueryWrapper<ProductionBatch>()
+                .eq(ProductionBatch::getBatchId, batchId.trim()));
+        if (batch == null || "COMPLETED".equals(batch.getStatus())) {
+            return;
+        }
+        Long cnt = deviceRecordMapper.selectCount(
+                new LambdaQueryWrapper<DeviceRecord>().eq(DeviceRecord::getBatchId, batchId.trim()));
+        int deviceCount = cnt == null ? 0 : cnt.intValue();
+        int q = deviceCount;
+        if (batch.getPlannedQty() != null && batch.getPlannedQty() > 0) {
+            q = Math.min(deviceCount, batch.getPlannedQty());
+        }
+        update(new LambdaUpdateWrapper<ProductionBatch>()
+                .eq(ProductionBatch::getBatchId, batchId.trim())
+                .set(ProductionBatch::getCompletedQty, q));
     }
 
     @Override

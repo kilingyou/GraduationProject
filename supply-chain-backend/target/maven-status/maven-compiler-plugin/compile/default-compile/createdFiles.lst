@@ -23,14 +23,17 @@ com\scm\module\distributor\controller\SalesController.class
 com\scm\module\enduser\entity\UserProduct.class
 com\scm\security\LoginUser.class
 com\scm\module\supplier\service\impl\DesignDocumentServiceImpl.class
+com\scm\module\manufacturer\service\RejectDispositionService.class
 com\scm\module\system\mapper\SysSupplierAuditMapper.class
 com\scm\config\SecurityConfig.class
 com\scm\integration\ipfs\RealIpfsStorageService.class
+com\scm\module\supplier\controller\RejectDispositionController.class
 com\scm\module\system\controller\SysRoleController.class
 com\scm\module\distributor\service\SalesRecordService.class
 com\scm\module\system\controller\AuthController.class
 com\scm\module\supplier\entity\BomItem.class
 com\scm\module\enduser\controller\TraceController.class
+com\scm\module\manufacturer\service\impl\RejectDispositionServiceImpl.class
 com\scm\module\regulator\service\impl\RecallNoticeServiceImpl.class
 com\scm\module\supplier\mapper\BomMapper.class
 com\scm\module\distributor\dto\LogisticsShipRequest.class
@@ -138,6 +141,7 @@ com\scm\integration\ipfs\InMemoryIpfsStorageService.class
 com\scm\module\enduser\controller\ComplaintController.class
 com\scm\module\manufacturer\controller\ManufacturerOrderController.class
 com\scm\module\enduser\service\impl\TraceServiceImpl.class
+com\scm\module\manufacturer\dto\RejectRecordVO.class
 com\scm\module\supplier\service\SupplierAuditGuardService.class
 com\scm\common\Result.class
 com\scm\module\regulator\service\impl\InspectionTaskServiceImpl.class

@@ -271,14 +271,17 @@ CREATE TABLE bus_reject_record (
     ecid            VARCHAR(100) NOT NULL,
     batch_id        VARCHAR(64),
     manufacturer_id BIGINT       NOT NULL,
+    order_id        VARCHAR(64)  COMMENT '关联生产订单，供应商处置列表用',
     reason          VARCHAR(500) COMMENT '不合格原因',
-    disposal_type   VARCHAR(30)  COMMENT 'RETURN/DESTROY',
-    disposal_status VARCHAR(20)  DEFAULT 'PENDING' COMMENT 'PENDING/PROCESSED',
-    tx_hash         VARCHAR(128),
+    disposal_type   VARCHAR(30)  COMMENT 'RETURN退货 / DESTROY销毁',
+    disposal_status VARCHAR(30)  DEFAULT 'PENDING' COMMENT 'AWAITING_SUPPLIER/AWAITING_MFG_DESTROY/COMPLETED',
+    tx_hash         VARCHAR(128) COMMENT 'MFG_REJECT 锚定',
+    disposal_complete_tx_hash VARCHAR(128) COMMENT '处置完结锚定',
     create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_ecid (ecid),
-    INDEX idx_batch_id (batch_id)
+    INDEX idx_batch_id (batch_id),
+    INDEX idx_order_id_reject (order_id)
 ) COMMENT '不合格记录表';
 
 -- ============================================================
@@ -630,4 +633,19 @@ SELECT r.id, m.id
 FROM sys_role r
 JOIN sys_menu m ON m.path = '/regulator/anomaly'
 WHERE r.role_key = 'regulator'
+  AND NOT EXISTS (SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id);
+
+-- 不合格处置（制造商质检不合格 → 退货/销毁闭环）
+INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, icon, sort_order)
+SELECT id, '不合格处置', '/supplier/reject', 'supplier/reject/index', 'supplier:reject:list', 'C', 'Warning', 5
+FROM sys_menu
+WHERE path = '/supplier' AND parent_id = 0 AND menu_type = 'M'
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE path = '/supplier/reject')
+LIMIT 1;
+
+INSERT INTO sys_role_menu (role_id, menu_id)
+SELECT r.id, m.id
+FROM sys_role r
+JOIN sys_menu m ON m.path = '/supplier/reject'
+WHERE r.role_key IN ('admin', 'supplier')
   AND NOT EXISTS (SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id);

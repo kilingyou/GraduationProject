@@ -55,7 +55,8 @@ export const constantRoutes = [
       { path: 'design', name: 'DesignDoc', component: () => import('@/views/supplier/design/index.vue'), meta: { title: '设计文档', icon: 'Document' } },
       { path: 'bom', name: 'BomMgmt', component: () => import('@/views/supplier/bom/index.vue'), meta: { title: 'BOM管理', icon: 'List' } },
       { path: 'order', name: 'ProdOrder', component: () => import('@/views/supplier/order/index.vue'), meta: { title: '生产订单', icon: 'Tickets' } },
-      { path: 'track', name: 'OrderTrack', component: () => import('@/views/supplier/track/index.vue'), meta: { title: '进度跟踪', icon: 'DataLine' } }
+      { path: 'track', name: 'OrderTrack', component: () => import('@/views/supplier/track/index.vue'), meta: { title: '进度跟踪', icon: 'DataLine' } },
+      { path: 'reject', name: 'SupplierReject', component: () => import('@/views/supplier/reject/index.vue'), meta: { title: '不合格处置', icon: 'Warning' } }
     ]
   },
   {

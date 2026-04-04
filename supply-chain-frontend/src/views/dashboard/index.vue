@@ -114,7 +114,8 @@ const roleActions = {
     { label: '设计文档', path: '/supplier/design', icon: 'Document', type: 'primary' },
     { label: 'BOM管理', path: '/supplier/bom', icon: 'List' },
     { label: '生产订单', path: '/supplier/order', icon: 'Tickets' },
-    { label: '进度跟踪', path: '/supplier/track', icon: 'DataLine' }
+    { label: '进度跟踪', path: '/supplier/track', icon: 'DataLine' },
+    { label: '不合格处置', path: '/supplier/reject', icon: 'Warning' }
   ],
   manufacturer: [
     { label: '订单接收', path: '/manufacturer/order', icon: 'Tickets', type: 'primary' },

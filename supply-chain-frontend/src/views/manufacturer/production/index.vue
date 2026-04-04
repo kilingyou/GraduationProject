@@ -40,6 +40,14 @@
             </el-form-item>
           </el-form>
 
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            class="batch-hint"
+            title="「完成数量」= 本批已生成 ECID 数（≤计划），不等于已完工。点「批次完工」时后端校验：设备数≥计划、每台均已上链且质检合格 → 状态变「已完成」；满足条件时也可自动完工。"
+          />
+
           <el-table v-loading="batchLoading" :data="batchList" stripe border style="width: 100%">
             <el-table-column prop="batchId" label="批次号" min-width="160" show-overflow-tooltip />
             <el-table-column prop="orderId" label="订单" min-width="140" show-overflow-tooltip />
@@ -88,12 +96,14 @@
             <el-form-item label="批次" prop="batchId">
               <el-select
                 v-model="ecidGenForm.batchId"
-                placeholder="选择批次"
+                placeholder="选择批次（表格仅显示该批次设备）"
                 filterable
-                style="width: 220px"
+                clearable
+                style="width: 280px"
+                @change="onEcidBatchFilterChange"
               >
                 <el-option
-                  v-for="b in batchOptions"
+                  v-for="b in batchDropdownList"
                   :key="b.batchId"
                   :label="b.batchId"
                   :value="b.batchId"
@@ -142,9 +152,51 @@
             @selection-change="handleSelectionChange"
           >
             <el-table-column type="selection" width="50" />
-            <el-table-column prop="ecid" label="ECID" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="orderId" label="订单" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="batchId" label="批次" min-width="140" show-overflow-tooltip />
+            <el-table-column label="ECID" min-width="200">
+              <template #default="{ row }">
+                <el-tooltip placement="top" :show-after="300">
+                  <template #content>
+                    <div style="max-width: 360px; word-break: break-all">{{ row.ecid }}</div>
+                    <div style="margin-top: 6px; font-size: 12px; opacity: 0.85">点击文字可复制</div>
+                  </template>
+                  <span
+                    class="copy-cell"
+                    title="点击复制"
+                    @click.stop="copyText(row.ecid, 'ECID')"
+                  >{{ row.ecid }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column label="订单" min-width="140">
+              <template #default="{ row }">
+                <el-tooltip placement="top" :show-after="300">
+                  <template #content>
+                    <div style="max-width: 360px; word-break: break-all">{{ row.orderId }}</div>
+                    <div style="margin-top: 6px; font-size: 12px; opacity: 0.85">点击文字可复制</div>
+                  </template>
+                  <span
+                    class="copy-cell"
+                    title="点击复制"
+                    @click.stop="copyText(row.orderId, '订单号')"
+                  >{{ row.orderId }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column label="批次" min-width="140">
+              <template #default="{ row }">
+                <el-tooltip placement="top" :show-after="300">
+                  <template #content>
+                    <div style="max-width: 360px; word-break: break-all">{{ row.batchId }}</div>
+                    <div style="margin-top: 6px; font-size: 12px; opacity: 0.85">点击文字可复制</div>
+                  </template>
+                  <span
+                    class="copy-cell"
+                    title="点击复制"
+                    @click.stop="copyText(row.batchId, '批次号')"
+                  >{{ row.batchId }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
             <el-table-column prop="deviceType" label="设备类型" width="120" align="center" />
             <el-table-column prop="status" label="状态" width="110" align="center">
               <template #default="{ row }">
@@ -202,7 +254,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrderList,
@@ -276,6 +328,7 @@ async function handleCreateBatch() {
     batchForm.orderId = ''
     batchForm.plannedQty = 100
     fetchBatches()
+    fetchBatchDropdownOptions()
   } catch { /* handled by interceptor */ } finally {
     batchCreating.value = false
   }
@@ -284,6 +337,7 @@ async function handleCreateBatch() {
 function goToEcidTab(row) {
   ecidGenForm.batchId = row.batchId
   activeTab.value = 'ecid'
+  ecidQuery.page = 1
   fetchEcids()
 }
 
@@ -297,6 +351,7 @@ async function handleBatchComplete(row) {
     await completeProductionBatch(row.batchId)
     ElMessage.success('批次已完工')
     fetchBatches()
+    fetchBatchDropdownOptions()
     fetchOrderOptions()
   } catch (e) {
     if (e !== 'cancel') {
@@ -335,7 +390,46 @@ const ecidGenRules = {
   deviceType: [{ required: true, message: '请输入设备类型', trigger: 'blur' }]
 }
 
-const batchOptions = computed(() => batchList.value)
+/** 下拉用：一次拉足批次，避免表格分页导致选项不全 */
+const batchDropdownList = ref([])
+
+async function fetchBatchDropdownOptions() {
+  try {
+    const { data } = await getBatchList({ page: 1, pageSize: 500 })
+    batchDropdownList.value = data.records ?? data.list ?? []
+  } catch { /* interceptor */ }
+}
+
+function onEcidBatchFilterChange() {
+  ecidQuery.page = 1
+  fetchEcids()
+}
+
+async function copyText(value, label = '内容') {
+  if (value == null || String(value).trim() === '') {
+    ElMessage.warning('无可复制内容')
+    return
+  }
+  const text = String(value)
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success(`已复制${label}`)
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      ElMessage.success(`已复制${label}`)
+    } catch {
+      ElMessage.error('复制失败，请手动选择文本复制')
+    }
+  }
+}
 
 async function fetchEcids() {
   ecidLoading.value = true
@@ -363,6 +457,7 @@ async function handleGenerateEcids() {
     ElMessage.success(`成功生成 ${ecidGenForm.quantity} 个 ECID`)
     fetchEcids()
     fetchBatches()
+    fetchBatchDropdownOptions()
   } catch { /* handled by interceptor */ } finally {
     ecidGenerating.value = false
   }
@@ -447,9 +542,16 @@ async function handleSingleExport(row) {
   }
 }
 
+watch(activeTab, (name) => {
+  if (name === 'ecid') {
+    fetchBatchDropdownOptions()
+  }
+})
+
 onMounted(() => {
   fetchOrderOptions()
   fetchBatches()
+  fetchBatchDropdownOptions()
   fetchEcids()
 })
 </script>
@@ -472,6 +574,10 @@ onMounted(() => {
     border-bottom: 1px solid #f0f0f0;
   }
 
+  .batch-hint {
+    margin-bottom: 12px;
+  }
+
   .bulk-bar {
     margin-bottom: 12px;
     display: flex;
@@ -483,5 +589,23 @@ onMounted(() => {
     justify-content: flex-end;
     margin-top: 16px;
   }
+
+  .copy-cell {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+    cursor: pointer;
+    color: var(--el-color-primary);
+    border-bottom: 1px dashed transparent;
+    transition: border-color 0.15s;
+
+    &:hover {
+      border-bottom-color: var(--el-color-primary-light-3);
+    }
+  }
+
 }
 </style>

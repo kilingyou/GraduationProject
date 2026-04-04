@@ -4,16 +4,19 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.scm.common.Constants;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.module.manufacturer.dto.RejectRecordVO;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.QualityReport;
 import com.scm.module.manufacturer.entity.RejectRecord;
 import com.scm.module.manufacturer.service.DeviceRecordService;
 import com.scm.module.manufacturer.service.QualityReportService;
+import com.scm.module.manufacturer.service.RejectDispositionService;
 import com.scm.module.manufacturer.service.RejectRecordService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +39,7 @@ public class QualityController {
     private final QualityReportService qualityReportService;
     private final DeviceRecordService deviceRecordService;
     private final RejectRecordService rejectRecordService;
+    private final RejectDispositionService rejectDispositionService;
     private final BlockchainAnchorService blockchainAnchorService;
 
     @PostMapping(value = "/report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -72,11 +76,24 @@ public class QualityController {
         }
         LoginUser user = currentUser();
         List<String> ecids = resolveEcids(targetType, targetId, user.getUserId());
+        // 批次级合格：不得覆盖已单独标记为不合格的 ECID；单台 ECID 合格仍允许（误判纠正）
+        if ("BATCH".equalsIgnoreCase(targetType)) {
+            ecids = deviceRecordService.list(new LambdaQueryWrapper<DeviceRecord>()
+                            .in(DeviceRecord::getEcid, ecids)
+                            .eq(DeviceRecord::getManufacturerId, user.getUserId())
+                            .ne(DeviceRecord::getStatus, Constants.REJECTED))
+                    .stream()
+                    .map(DeviceRecord::getEcid)
+                    .collect(Collectors.toList());
+            if (ecids.isEmpty()) {
+                return Result.fail("本批次无待标记设备，或设备均已标记为不合格");
+            }
+        }
         String anchorPayload = String.join(",", ecids) + "|QC_PASS";
         blockchainAnchorService.anchor("MFG_QC_PASS", HashUtil.sha256Hex(anchorPayload));
         boolean updated = deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()
                 .in(DeviceRecord::getEcid, ecids)
-                .set(DeviceRecord::getStatus, "QC_PASS"));
+                .set(DeviceRecord::getStatus, Constants.QC_PASS));
         return updated ? Result.ok() : Result.fail("更新失败");
     }
 
@@ -93,26 +110,83 @@ public class QualityController {
         }
         LoginUser user = currentUser();
         List<String> ecids = resolveEcids(targetType, targetId, user.getUserId());
-        String anchorPayload = String.join(",", ecids) + "|" + reason;
+        String disposalType = normalizeDisposalType(body.get("disposalType"));
+        if (disposalType == null) {
+            return Result.fail("请选择处置方式：退货(RETURN) 或 销毁(DESTROY)");
+        }
+        String anchorPayload = String.join(",", ecids) + "|" + reason + "|" + disposalType;
         String txHash = blockchainAnchorService.anchor("MFG_REJECT", HashUtil.sha256Hex(anchorPayload));
 
         deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()
                 .in(DeviceRecord::getEcid, ecids)
-                .set(DeviceRecord::getStatus, "REJECTED"));
+                .set(DeviceRecord::getStatus, Constants.REJECTED));
+        String disposalStatus = Constants.DISPOSAL_RETURN.equals(disposalType)
+                ? Constants.DISPOSAL_AWAITING_SUPPLIER
+                : Constants.DISPOSAL_AWAITING_MFG_DESTROY;
 
         for (String ecid : ecids) {
+            DeviceRecord dev = deviceRecordService.getOne(new LambdaQueryWrapper<DeviceRecord>()
+                    .eq(DeviceRecord::getEcid, ecid)
+                    .eq(DeviceRecord::getManufacturerId, user.getUserId()));
             RejectRecord record = new RejectRecord();
             record.setEcid(ecid);
             if ("BATCH".equalsIgnoreCase(targetType)) {
                 record.setBatchId(targetId);
             }
             record.setManufacturerId(user.getUserId());
+            record.setOrderId(dev != null ? dev.getOrderId() : null);
             record.setReason(reason);
-            record.setDisposalStatus("PENDING");
+            record.setDisposalType(disposalType);
+            record.setDisposalStatus(disposalStatus);
             record.setTxHash(txHash);
             rejectRecordService.save(record);
         }
         return Result.ok();
+    }
+
+    /**
+     * 制造商：本企业产生的不合格记录及处置状态。
+     */
+    @GetMapping("/reject-record/list")
+    public Result<PageResult<RejectRecordVO>> listRejectRecords(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        LoginUser user = currentUser();
+        return Result.ok(rejectDispositionService.pageForManufacturer(user.getUserId(), pageNum, pageSize));
+    }
+
+    /**
+     * 制造商：确认销毁类处置已执行完毕并上链。
+     */
+    @PostMapping("/reject-record/confirm-destroy")
+    public Result<Void> confirmRejectDestroy(@RequestBody Map<String, Object> body) {
+        Object idObj = body.get("id");
+        if (idObj == null) {
+            return Result.fail("请提供记录 id");
+        }
+        long recordId = idObj instanceof Number ? ((Number) idObj).longValue() : Long.parseLong(String.valueOf(idObj));
+        rejectDispositionService.confirmDestroyByManufacturer(recordId, currentUser().getUserId());
+        return Result.ok();
+    }
+
+    private static String normalizeDisposalType(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = String.valueOf(raw).trim().toUpperCase();
+        if (s.isEmpty()) {
+            return null;
+        }
+        if ("退货".equals(raw) || "RETURN".equals(s)) {
+            return Constants.DISPOSAL_RETURN;
+        }
+        if ("销毁".equals(raw) || "DESTROY".equals(s)) {
+            return Constants.DISPOSAL_DESTROY;
+        }
+        if (Constants.DISPOSAL_RETURN.equals(s) || Constants.DISPOSAL_DESTROY.equals(s)) {
+            return s;
+        }
+        return null;
     }
 
     @GetMapping("/report/list")

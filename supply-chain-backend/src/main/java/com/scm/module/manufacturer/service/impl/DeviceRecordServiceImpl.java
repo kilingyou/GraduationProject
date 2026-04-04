@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
@@ -74,6 +75,7 @@ public class DeviceRecordServiceImpl
             records.add(record);
         }
         saveBatch(records);
+        productionBatchService.refreshCompletedQtyFromDevices(batchId);
         return ecids;
     }
 
@@ -118,6 +120,14 @@ public class DeviceRecordServiceImpl
     @Transactional(rollbackFor = Exception.class)
     public boolean registerOnChain(List<Long> ids) {
         List<DeviceRecord> records = listByIds(ids);
+        List<String> rejectedEcids = records.stream()
+                .filter(r -> Constants.REJECTED.equals(r.getStatus()))
+                .map(DeviceRecord::getEcid)
+                .collect(Collectors.toList());
+        if (!rejectedEcids.isEmpty()) {
+            throw new BusinessException(
+                    "质检不合格的设备不能上链注册，请先处理或取消勾选：" + String.join("、", rejectedEcids));
+        }
         for (DeviceRecord record : records) {
             String payload = record.getEcid() + "|" + record.getOrderId() + "|"
                     + record.getBatchId() + "|" + record.getManufacturerId();
@@ -125,7 +135,9 @@ public class DeviceRecordServiceImpl
                     "DEVICE_REGISTER", HashUtil.sha256Hex(payload));
             record.setChainRegistered(1);
             record.setTxHash(txHash);
-            record.setStatus("QC_PASS");
+            if (!Constants.QC_PASS.equals(record.getStatus())) {
+                record.setStatus(Constants.QC_PASS);
+            }
         }
         boolean ok = updateBatchById(records);
         if (ok) {

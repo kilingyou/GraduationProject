@@ -38,4 +38,18 @@ public final class Constants {
     public static final String ASSEMBLED = "ASSEMBLED";
     public static final String SOLD = "SOLD";
     public static final String DECOMMISSIONED = "DECOMMISSIONED";
+
+    // --- 不合格处置（RejectRecord.disposalType / disposalStatus）---
+
+    /** 退货至供应商 */
+    public static final String DISPOSAL_RETURN = "RETURN";
+    /** 就地销毁 */
+    public static final String DISPOSAL_DESTROY = "DESTROY";
+
+    /** 待供应商确认退货收讫 */
+    public static final String DISPOSAL_AWAITING_SUPPLIER = "AWAITING_SUPPLIER";
+    /** 待制造商确认已销毁 */
+    public static final String DISPOSAL_AWAITING_MFG_DESTROY = "AWAITING_MFG_DESTROY";
+    /** 处置已闭环 */
+    public static final String DISPOSAL_COMPLETED = "COMPLETED";
 }

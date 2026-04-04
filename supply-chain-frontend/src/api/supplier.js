@@ -82,3 +82,11 @@ export function cancelProductionOrder(id) {
 export function listManufacturerOptions() {
   return request({ url: '/supplier/manufacturers', method: 'get' })
 }
+
+export function getRejectDispositionList(params) {
+  return request({ url: '/supplier/reject-disposition/list', method: 'get', params })
+}
+
+export function confirmRejectReturn(data) {
+  return request({ url: '/supplier/reject-disposition/confirm-return', method: 'post', data })
+}
