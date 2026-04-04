@@ -28,7 +28,7 @@
               >
                 <template #title>
                   <el-icon><component :is="top.icon || 'FolderOpened'" /></el-icon>
-                  <span>{{ top.menuName }}</span>
+                  <span>{{ menuDisplayName(top) }}</span>
                 </template>
                 <template v-for="child in top.children" :key="child.id || child.path">
                   <el-sub-menu
@@ -37,7 +37,7 @@
                   >
                     <template #title>
                       <el-icon><component :is="child.icon || 'FolderOpened'" /></el-icon>
-                      <span>{{ child.menuName }}</span>
+                      <span>{{ menuDisplayName(child) }}</span>
                     </template>
                     <el-menu-item
                       v-for="sub in child.children"
@@ -45,18 +45,18 @@
                       :index="sub.path"
                     >
                       <el-icon><component :is="sub.icon || 'Document'" /></el-icon>
-                      <span>{{ sub.menuName }}</span>
+                      <span>{{ menuDisplayName(sub) }}</span>
                     </el-menu-item>
                   </el-sub-menu>
                   <el-menu-item v-else :index="child.path">
                     <el-icon><component :is="child.icon || 'Document'" /></el-icon>
-                    <span>{{ child.menuName }}</span>
+                    <span>{{ menuDisplayName(child) }}</span>
                   </el-menu-item>
                 </template>
               </el-sub-menu>
               <el-menu-item v-else-if="top.path" :index="top.path">
                 <el-icon><component :is="top.icon || 'Document'" /></el-icon>
-                <span>{{ top.menuName }}</span>
+                <span>{{ menuDisplayName(top) }}</span>
               </el-menu-item>
             </template>
           </template>
@@ -181,6 +181,22 @@ const roleLabels = {
   distributor: '分销商',
   regulator: '监管机构',
   enduser: '终端用户'
+}
+
+/** 按 path 覆盖标题，避免 sys_menu.menu_name 因 SQL 客户端编码错误入库后出现乱码 */
+const API_MENU_TITLE_BY_PATH = {
+  '/enduser': '终端用户',
+  '/enduser/trace': '溯源查询',
+  '/enduser/bind': '产品绑定',
+  '/enduser/complaint': '投诉反馈',
+  '/enduser/decommission': '报废登记'
+}
+
+function menuDisplayName(item) {
+  if (!item) return ''
+  const p = item.path
+  if (p && API_MENU_TITLE_BY_PATH[p]) return API_MENU_TITLE_BY_PATH[p]
+  return item.menuName || ''
 }
 
 const roleKey = computed(() => userStore.userInfo?.roleKey || '')
