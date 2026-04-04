@@ -20,6 +20,9 @@ public class ManufacturerOrderVO extends ProductionRequest {
     /** 设计文档 SHA-256，供前端校验展示 */
     private String designDocFileHash;
 
+    /** 原始上传文件名，供前端另存为 */
+    private String designDocFileName;
+
     /** IPFS CID（原始），网关为空时仍可拼接 */
     private String designDocIpfsCid;
 

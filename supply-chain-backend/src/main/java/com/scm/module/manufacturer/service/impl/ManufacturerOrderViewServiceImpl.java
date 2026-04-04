@@ -169,6 +169,7 @@ public class ManufacturerOrderViewServiceImpl implements ManufacturerOrderViewSe
             if (d != null) {
                 vo.setDesignDocName(d.getDocName());
                 vo.setDesignDocFileHash(d.getFileHash());
+                vo.setDesignDocFileName(d.getFileName());
                 vo.setDesignDocIpfsCid(d.getIpfsCid());
                 if (StringUtils.hasText(d.getIpfsCid()) && StringUtils.hasText(ipfsGateway)) {
                     String base = ipfsGateway.endsWith("/") ? ipfsGateway : ipfsGateway + "/";

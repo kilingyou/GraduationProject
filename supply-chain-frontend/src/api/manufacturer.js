@@ -12,6 +12,15 @@ export function getAgreement(orderId) {
   return request({ url: `/manufacturer/order/${orderId}/agreement`, method: 'get' })
 }
 
+/** 经鉴权从后端拉取设计文件（不直连 IPFS 网关） */
+export function getManufacturerOrderDesignFileBlob(orderId) {
+  return request({
+    url: `/manufacturer/order/${orderId}/design-file`,
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
 export function createBatch(data) {
   return request({ url: '/manufacturer/production/batch', method: 'post', data })
 }

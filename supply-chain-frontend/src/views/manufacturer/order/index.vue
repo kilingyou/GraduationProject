@@ -49,14 +49,15 @@
         <el-table-column prop="designDocFileHash" label="设计文档哈希" min-width="160" show-overflow-tooltip />
         <el-table-column label="图纸" width="100" align="center">
           <template #default="{ row }">
-            <el-link
-              v-if="row.designDocDownloadUrl"
+            <el-button
+              v-if="canDownloadDesign(row)"
               type="primary"
-              :href="row.designDocDownloadUrl"
-              target="_blank"
+              link
+              :loading="designDownloadOrderId === row.orderId"
+              @click="downloadDesignFile(row)"
             >
               下载
-            </el-link>
+            </el-button>
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
@@ -185,7 +186,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getOrderList, acceptOrder, getAgreement } from '@/api/manufacturer'
+import { getOrderList, acceptOrder, getAgreement, getManufacturerOrderDesignFileBlob } from '@/api/manufacturer'
 
 const STATUS_MAP = {
   PENDING_ACCEPTANCE: { label: '待接单', type: 'warning' },
@@ -200,6 +201,32 @@ const statusType = (s) => STATUS_MAP[s]?.type ?? 'info'
 
 const loading = ref(false)
 const submitting = ref(false)
+const designDownloadOrderId = ref('')
+
+function canDownloadDesign(row) {
+  return !!(row?.designDocIpfsCid || row?.designDocFileHash)
+}
+
+async function downloadDesignFile(row) {
+  if (!row?.orderId) return
+  designDownloadOrderId.value = row.orderId
+  try {
+    const data = await getManufacturerOrderDesignFileBlob(row.orderId)
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/octet-stream' })
+    const baseName = row.designDocFileName || row.designDocName || `order-${row.orderId}-design`
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = baseName
+    a.click()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('已开始下载')
+  } catch {
+    /* axios 拦截器已提示 */
+  } finally {
+    designDownloadOrderId.value = ''
+  }
+}
 const orderList = ref([])
 const total = ref(0)
 const orderScope = ref('pool')
