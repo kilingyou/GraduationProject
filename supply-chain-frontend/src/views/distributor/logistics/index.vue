@@ -100,6 +100,21 @@
         </el-table-column>
         <el-table-column prop="shipTime" label="发货时间" width="180" />
         <el-table-column prop="actualArrival" label="到达时间" width="180" />
+        <el-table-column label="操作" width="120" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="canOneClickReceive(row)"
+              type="success"
+              size="small"
+              link
+              :loading="row._receiving"
+              @click="handleOneClickReceive(row)"
+            >
+              一键收货
+            </el-button>
+            <span v-else class="op-placeholder">—</span>
+          </template>
+        </el-table-column>
       </el-table>
       <el-pagination
         class="mt-16"
@@ -248,7 +263,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Van, Box, Location, List } from '@element-plus/icons-vue'
 import {
   shipProducts, receiveProducts, getTransferList, trackProduct,
@@ -313,7 +328,10 @@ async function loadTransfers() {
   listLoading.value = true
   try {
     const res = await getTransferList({ page: page.page, size: page.size })
-    transferList.value = res.data?.records || res.data?.list || []
+    transferList.value = (res.data?.records || res.data?.list || []).map(r => ({
+      ...r,
+      _receiving: false
+    }))
     page.total = res.data?.total || 0
   } catch {
     ElMessage.error('加载流转记录失败')
@@ -329,6 +347,36 @@ function transferStatusType(s) {
 function transferStatusLabel(s) {
   const m = { PENDING: '待处理', RECEIVED: '已收货', IN_TRANSIT: '在途', ANOMALY: '异常' }
   return m[s] ?? s
+}
+
+function canOneClickReceive(row) {
+  const uid = userStore.userId
+  if (uid == null || row?.receiverId == null) return false
+  if (Number(uid) !== Number(row.receiverId)) return false
+  const s = row.status
+  return s === 'IN_TRANSIT' || s === 'PENDING'
+}
+
+async function handleOneClickReceive(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确认收货？运单 ${row.trackingNumber || '—'}，SN ${row.sn || '—'}`,
+      '一键收货',
+      { type: 'warning', confirmButtonText: '确认收货', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  row._receiving = true
+  try {
+    await receiveProducts({ transferId: row.id })
+    ElMessage.success('收货成功，货权已更新')
+    loadTransfers()
+  } catch (e) {
+    ElMessage.error(e.message || '收货失败')
+  } finally {
+    row._receiving = false
+  }
 }
 
 // ---- Ship ----
@@ -516,6 +564,10 @@ onMounted(() => {
   font-size: 12px;
   color: #606266;
   word-break: break-all;
+}
+.op-placeholder {
+  color: #c0c4cc;
+  font-size: 13px;
 }
 .action-card__text {
   h3 {

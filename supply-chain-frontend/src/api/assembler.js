@@ -42,6 +42,16 @@ export function getAssemblyRecordList(params) {
   return request({ url: '/assembler/assembly/record/list', method: 'get', params })
 }
 
+/** 导出 SN 列 Excel，与分销商 SN 批量发货模板格式一致（表头 SN） */
+export function exportAssemblySnShipFormat(params) {
+  return request({
+    url: '/assembler/assembly/record/export-sn-xlsx',
+    method: 'get',
+    params,
+    responseType: 'blob'
+  })
+}
+
 export function registerAssemblyOnChain(id) {
   return request({ url: `/assembler/assembly/record/${id}/register`, method: 'post' })
 }

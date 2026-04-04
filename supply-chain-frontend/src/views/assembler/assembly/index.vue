@@ -66,6 +66,11 @@
           <el-form-item>
             <el-button :loading="exportLoading" @click="handleExportRecords">导出 CSV</el-button>
           </el-form-item>
+          <el-form-item>
+            <el-button type="primary" plain :loading="exportSnXlsxLoading" @click="handleExportSnXlsx">
+              一键导出 SN
+            </el-button>
+          </el-form-item>
         </el-form>
         <el-card shadow="never" class="mb-16">
           <el-form :model="recordForm" :rules="recordRules" ref="recordFormRef" label-width="100px">
@@ -215,7 +220,8 @@ import {
   createAssemblyBatch, getAssemblyBatchList,
   createAssemblyRecord, getAssemblyRecordList,
   registerAssemblyOnChain,
-  getAvailableIntakeEcids
+  getAvailableIntakeEcids,
+  exportAssemblySnShipFormat
 } from '@/api/assembler'
 import { useUserStore } from '@/store/user'
 
@@ -290,6 +296,7 @@ const recordPage = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const recordFilterBatchNo = ref('')
 const generatedSn = ref('')
 const exportLoading = ref(false)
+const exportSnXlsxLoading = ref(false)
 
 const ecidOptions = ref([])
 const ecidOptionsLoading = ref(false)
@@ -446,6 +453,26 @@ async function handleExportRecords() {
     ElMessage.error('导出失败')
   } finally {
     exportLoading.value = false
+  }
+}
+
+async function handleExportSnXlsx() {
+  exportSnXlsxLoading.value = true
+  try {
+    const params = {}
+    if (recordFilterBatchNo.value) params.assemblyBatchNo = recordFilterBatchNo.value
+    const blob = await exportAssemblySnShipFormat(params)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'assembly-sn-ship-template.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('已导出 Excel（表头 SN，与批量发货模板一致）')
+  } catch {
+    ElMessage.error('导出失败')
+  } finally {
+    exportSnXlsxLoading.value = false
   }
 }
 
