@@ -15,13 +15,16 @@ import com.scm.module.manufacturer.service.DeviceRecordService;
 import com.scm.module.manufacturer.service.ProductionBatchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,10 +42,16 @@ public class DeviceRecordServiceImpl
     public List<String> generateEcids(String batchId, String orderId, Long manufacturerId, Integer qty, String deviceType) {
         String dateStr = LocalDate.now().format(DATE_FMT);
         String mfCode = "M" + String.format("%04d", manufacturerId % 10000);
-
-        long existingCount = count(new LambdaQueryWrapper<DeviceRecord>()
-                .eq(DeviceRecord::getBatchId, batchId));
-        int startSeq = (int) existingCount + 1;
+        // ECID 序号按「制造商 + 当天日期」全局递增，不能仅按批次计数，否则多批次同日会重复
+        String ecidPrefix = "ECID-" + mfCode + "-" + dateStr + "-";
+        int maxSeq = list(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getManufacturerId, manufacturerId)
+                .likeRight(DeviceRecord::getEcid, ecidPrefix))
+                .stream()
+                .mapToInt(r -> parseEcidSeq(r.getEcid(), ecidPrefix))
+                .max()
+                .orElse(0);
+        int startSeq = maxSeq + 1;
 
         List<DeviceRecord> records = new ArrayList<>(qty);
         List<String> ecids = new ArrayList<>(qty);
@@ -66,6 +75,17 @@ public class DeviceRecordServiceImpl
         }
         saveBatch(records);
         return ecids;
+    }
+
+    private static int parseEcidSeq(String ecid, String prefix) {
+        if (ecid == null || !ecid.startsWith(prefix)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(ecid.substring(prefix.length()));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     @Override
@@ -95,6 +115,7 @@ public class DeviceRecordServiceImpl
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean registerOnChain(List<Long> ids) {
         List<DeviceRecord> records = listByIds(ids);
         for (DeviceRecord record : records) {
@@ -106,7 +127,19 @@ public class DeviceRecordServiceImpl
             record.setTxHash(txHash);
             record.setStatus("QC_PASS");
         }
-        return updateBatchById(records);
+        boolean ok = updateBatchById(records);
+        if (ok) {
+            Map<String, Long> batchToManufacturer = new LinkedHashMap<>();
+            for (DeviceRecord r : records) {
+                if (StringUtils.hasText(r.getBatchId())) {
+                    batchToManufacturer.putIfAbsent(r.getBatchId(), r.getManufacturerId());
+                }
+            }
+            for (Map.Entry<String, Long> e : batchToManufacturer.entrySet()) {
+                productionBatchService.tryAutoCompleteBatch(e.getKey(), e.getValue());
+            }
+        }
+        return ok;
     }
 
     @Override

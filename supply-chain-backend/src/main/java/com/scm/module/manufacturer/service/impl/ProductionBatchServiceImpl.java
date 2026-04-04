@@ -141,6 +141,52 @@ public class ProductionBatchServiceImpl
                 throw new BusinessException("存在未质检合格的 ECID: " + d.getEcid());
             }
         }
+        finalizeBatchAndMaybeCompleteOrder(batch, manufacturerId, devices);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void tryAutoCompleteBatch(String batchId, Long manufacturerId) {
+        ProductionBatch batch = getOne(new LambdaQueryWrapper<ProductionBatch>()
+                .eq(ProductionBatch::getBatchId, batchId));
+        if (!isBatchEligibleForAutoCompletion(batch, manufacturerId)) {
+            return;
+        }
+        List<DeviceRecord> devices = deviceRecordMapper.selectList(
+                new LambdaQueryWrapper<DeviceRecord>().eq(DeviceRecord::getBatchId, batchId));
+        if (!isDeviceListSatisfied(batch, devices)) {
+            return;
+        }
+        finalizeBatchAndMaybeCompleteOrder(batch, manufacturerId, devices);
+    }
+
+    private boolean isBatchEligibleForAutoCompletion(ProductionBatch batch, Long manufacturerId) {
+        return batch != null
+                && manufacturerId.equals(batch.getManufacturerId())
+                && !"COMPLETED".equals(batch.getStatus());
+    }
+
+    /** 与 completeBatch 中设备条件一致（不抛异常，供自动完工判断） */
+    private boolean isDeviceListSatisfied(ProductionBatch batch, List<DeviceRecord> devices) {
+        if (devices.isEmpty()) {
+            return false;
+        }
+        if (batch.getPlannedQty() != null && devices.size() < batch.getPlannedQty()) {
+            return false;
+        }
+        for (DeviceRecord d : devices) {
+            if (d.getChainRegistered() == null || d.getChainRegistered() != 1) {
+                return false;
+            }
+            if (!Constants.QC_PASS.equals(d.getStatus())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void finalizeBatchAndMaybeCompleteOrder(ProductionBatch batch, Long manufacturerId,
+                                                    List<DeviceRecord> devices) {
         batch.setStatus("COMPLETED");
         batch.setCompletedQty(devices.size());
         updateById(batch);
