@@ -38,8 +38,9 @@
       </el-table-column>
       <el-table-column prop="ipfsCid" label="IPFS CID" min-width="180" show-overflow-tooltip />
       <el-table-column prop="createTime" label="创建时间" width="170" align="center" />
-      <el-table-column label="操作" width="240" align="center" fixed="right">
+      <el-table-column label="操作" width="300" align="center" fixed="right">
         <template #default="{ row }">
+          <el-button link type="success" @click="openPreview(row)">预览图纸</el-button>
           <el-button link type="primary" @click="handleView(row)">查看</el-button>
           <el-button
             link
@@ -102,7 +103,10 @@
     </el-dialog>
 
     <!-- Detail Dialog -->
-    <el-dialog v-model="detailDialogVisible" title="文档详情" width="600px">
+    <el-dialog v-model="detailDialogVisible" title="文档详情" width="720px">
+      <div v-if="detail.id" class="detail-preview-actions">
+        <el-button type="primary" plain size="small" @click="openPreviewById(detail)">预览上传文件</el-button>
+      </div>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="文档名称">{{ detail.docName }}</el-descriptions-item>
         <el-descriptions-item label="文档类型">
@@ -121,6 +125,35 @@
         <el-descriptions-item label="更新时间">{{ detail.updateTime }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <el-dialog
+      v-model="previewDialogVisible"
+      title="设计文档预览"
+      width="85%"
+      top="4vh"
+      @close="closePreview"
+    >
+      <div v-if="previewLoading" class="preview-loading">文件加载中...</div>
+      <div v-else class="preview-wrap">
+        <img
+          v-if="previewIsImage"
+          :src="previewUrl"
+          alt="preview"
+          class="preview-img"
+        />
+        <iframe
+          v-else-if="previewUrl"
+          :src="previewUrl"
+          class="preview-frame"
+          title="document-preview"
+        />
+        <div v-else class="preview-empty">暂无可预览内容</div>
+      </div>
+      <template #footer>
+        <el-button @click="closePreview">关闭</el-button>
+        <el-button type="primary" :disabled="!previewBlob" @click="downloadPreview">下载文件</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -134,7 +167,8 @@ import {
   getDesignDocList,
   getDesignDocDetail,
   verifyDesignDoc,
-  deleteDesignDoc
+  deleteDesignDoc,
+  getDesignDocFileBlob
 } from '@/api/supplier'
 
 const loading = ref(false)
@@ -148,6 +182,13 @@ const uploadFormRef = ref()
 const uploadRef = ref()
 const userStore = useUserStore()
 const isSupplierApproved = computed(() => userStore.isSupplierApproved)
+
+const previewDialogVisible = ref(false)
+const previewLoading = ref(false)
+const previewUrl = ref('')
+const previewBlob = ref(null)
+const previewIsImage = ref(false)
+const previewDownloadName = ref('design-file')
 
 const queryParams = reactive({
   keyword: '',
@@ -219,10 +260,14 @@ async function submitUpload() {
 
   uploading.value = true
   try {
-    await uploadDesignDoc(formData)
+    const upRes = await uploadDesignDoc(formData)
     ElMessage.success('上传成功')
     uploadDialogVisible.value = false
-    fetchList()
+    await fetchList()
+    const saved = upRes?.data
+    if (saved?.id) {
+      openPreview({ id: saved.id, fileName: saved.fileName })
+    }
   } catch {
     ElMessage.error('上传失败')
   } finally {
@@ -244,7 +289,8 @@ async function handleVerify(row) {
   row._verifying = true
   try {
     const res = await verifyDesignDoc(row.id)
-    if (res.data?.match) {
+    // 后端 Result<Boolean>：data 为 true/false，不是 { match }
+    if (res.data === true) {
       ElMessage.success('哈希校验通过，文件完整性验证成功')
     } else {
       ElMessage.error('哈希校验不通过，文件可能已被篡改')
@@ -279,11 +325,101 @@ function openUploadDialog() {
   uploadDialogVisible.value = true
 }
 
+function openPreviewById(doc) {
+  if (!doc?.id) return
+  openPreview({ id: doc.id, fileName: doc.fileName })
+}
+
+async function openPreview(row) {
+  if (!row?.id) return
+  previewDialogVisible.value = true
+  previewLoading.value = true
+  previewIsImage.value = false
+  previewDownloadName.value = row.fileName || `design-${row.id}`
+  try {
+    const data = await getDesignDocFileBlob(row.id)
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/octet-stream' })
+    previewBlob.value = blob
+    const objectUrl = window.URL.createObjectURL(blob)
+    if (previewUrl.value) {
+      window.URL.revokeObjectURL(previewUrl.value)
+    }
+    previewUrl.value = objectUrl
+    previewIsImage.value = blob.type.startsWith('image/')
+  } catch {
+    previewDialogVisible.value = false
+    ElMessage.error('文件加载失败，请确认 IPFS 可用')
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function closePreview() {
+  previewDialogVisible.value = false
+  if (previewUrl.value) {
+    window.URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
+  previewBlob.value = null
+  previewIsImage.value = false
+}
+
+function downloadPreview() {
+  if (!previewBlob.value) return
+  const url = window.URL.createObjectURL(previewBlob.value)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = previewDownloadName.value || 'design-file'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+}
+
 onMounted(() => fetchList())
 </script>
 
 <style scoped lang="scss">
 .search-bar {
   margin-bottom: 0;
+}
+
+.detail-preview-actions {
+  margin-bottom: 12px;
+}
+
+.preview-loading {
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.preview-wrap {
+  height: 72vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.preview-frame {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.preview-img {
+  max-width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+}
+
+.preview-empty {
+  color: #909399;
 }
 </style>

@@ -4,15 +4,22 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
+import com.scm.integration.ipfs.IpfsStorageService;
 import com.scm.module.supplier.entity.DesignDocument;
 import com.scm.module.supplier.service.DesignDocumentService;
 import com.scm.module.supplier.service.SupplierAuditGuardService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 
 @RestController
@@ -22,6 +29,7 @@ public class DesignDocumentController {
 
     private final DesignDocumentService designDocumentService;
     private final SupplierAuditGuardService supplierAuditGuardService;
+    private final IpfsStorageService ipfsStorageService;
 
     @PostMapping("/upload")
     public Result<DesignDocument> upload(@RequestParam("file") MultipartFile file,
@@ -66,6 +74,37 @@ public class DesignDocumentController {
                 .setCurrent(result.getCurrent())
                 .setSize(result.getSize());
         return Result.ok(pageResult);
+    }
+
+    /**
+     * 下载/预览：仅文档所属供应商可访问，从 IPFS 取回原始字节。
+     */
+    @GetMapping("/{id}/file")
+    public ResponseEntity<byte[]> downloadFile(@PathVariable Long id) {
+        LoginUser loginUser = getCurrentUser();
+        DesignDocument doc = designDocumentService.getOwned(id, loginUser.getUserId());
+        if (doc == null || !StringUtils.hasText(doc.getIpfsCid())) {
+            return ResponseEntity.notFound().build();
+        }
+        byte[] data = ipfsStorageService.get(doc.getIpfsCid());
+        if (data == null || data.length == 0) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String guessed = null;
+        try {
+            guessed = java.net.URLConnection.guessContentTypeFromStream(new ByteArrayInputStream(data));
+        } catch (Exception ignore) {
+        }
+        MediaType mediaType = StringUtils.hasText(guessed)
+                ? MediaType.parseMediaType(guessed)
+                : MediaType.APPLICATION_OCTET_STREAM;
+
+        String filename = StringUtils.hasText(doc.getFileName()) ? doc.getFileName() : "design-document";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.setContentDisposition(ContentDisposition.inline().filename(filename).build());
+        return ResponseEntity.ok().headers(headers).body(data);
     }
 
     @GetMapping("/{id}")

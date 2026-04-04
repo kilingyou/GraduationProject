@@ -25,6 +25,14 @@ export function deleteDesignDoc(id) {
   return request({ url: `/supplier/design/${id}`, method: 'delete' })
 }
 
+export function getDesignDocFileBlob(id) {
+  return request({
+    url: `/supplier/design/${id}/file`,
+    method: 'get',
+    responseType: 'blob'
+  })
+}
+
 export function createBom(data) {
   return request({ url: '/supplier/bom', method: 'post', data })
 }
