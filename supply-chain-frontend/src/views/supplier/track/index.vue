@@ -18,7 +18,14 @@
       </div>
     </div>
 
-    <el-table v-loading="loading" :data="tableData" border stripe @expand-change="onExpandChange">
+    <el-table
+      ref="tableRef"
+      v-loading="loading"
+      :data="tableData"
+      border
+      stripe
+      @expand-change="onExpandChange"
+    >
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="expand-content">
@@ -87,7 +94,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="id" label="订单ID" width="80" align="center" />
+      <el-table-column prop="orderId" label="订单ID" min-width="140" show-overflow-tooltip />
       <el-table-column prop="bomName" label="BOM" min-width="140" show-overflow-tooltip />
       <el-table-column prop="quantity" label="数量" width="80" align="center" />
       <el-table-column prop="expectedDelivery" label="期望交期" width="120" align="center" />
@@ -125,7 +132,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getProductionOrderList, getProductionOrderTrack } from '@/api/supplier'
 
@@ -164,6 +171,7 @@ function getTimelineSteps(row) {
 const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
+const tableRef = ref(null)
 
 const queryParams = reactive({
   status: '',
@@ -202,6 +210,12 @@ function onExpandChange(row, expanded) {
 }
 
 async function handleExpand(row) {
+  if (row.id == null) {
+    ElMessage.warning('订单缺少主键，无法加载详情')
+    return
+  }
+  await nextTick()
+  tableRef.value?.toggleRowExpansion(row, true)
   if (row._detail) return
   row._loading = true
   try {
