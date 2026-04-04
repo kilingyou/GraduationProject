@@ -25,6 +25,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -73,7 +74,7 @@ public class ManufacturerOrderController {
     public Result<ManufacturingAgreement> acceptOrder(
             @PathVariable String orderId,
             @RequestParam BigDecimal finalPrice,
-            @RequestParam LocalDate deliveryDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate,
             @RequestPart(value = "agreementFile", required = false) MultipartFile agreementFile)
             throws java.io.IOException {
         LoginUser user = currentUser();
