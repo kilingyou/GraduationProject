@@ -12,10 +12,12 @@ import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.ManufacturingAgreement;
 import com.scm.module.manufacturer.entity.ProductionBatch;
+import com.scm.module.manufacturer.entity.RejectRecord;
 import com.scm.module.manufacturer.mapper.DeviceRecordMapper;
 import com.scm.module.manufacturer.mapper.ProductionBatchMapper;
 import com.scm.module.manufacturer.service.ManufacturingAgreementService;
 import com.scm.module.manufacturer.service.ProductionBatchService;
+import com.scm.module.manufacturer.service.RejectRecordService;
 import com.scm.module.supplier.entity.ProductionRequest;
 import com.scm.module.supplier.service.ProductionRequestService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,7 @@ public class ProductionBatchServiceImpl
     private final ProductionRequestService productionRequestService;
     private final ManufacturingAgreementService manufacturingAgreementService;
     private final DeviceRecordMapper deviceRecordMapper;
+    private final RejectRecordService rejectRecordService;
     private final BlockchainAnchorService blockchainAnchorService;
 
     @Override
@@ -158,12 +161,7 @@ public class ProductionBatchServiceImpl
             throw new BusinessException("已生成 ECID 数量少于计划数量，请先补足生产数量再完工");
         }
         for (DeviceRecord d : devices) {
-            if (d.getChainRegistered() == null || d.getChainRegistered() != 1) {
-                throw new BusinessException("存在未上链的 ECID: " + d.getEcid());
-            }
-            if (!Constants.QC_PASS.equals(d.getStatus())) {
-                throw new BusinessException("存在未质检合格的 ECID: " + d.getEcid());
-            }
+            assertDeviceReadyForBatchClose(d, manufacturerId);
         }
         finalizeBatchAndMaybeCompleteOrder(batch, manufacturerId, devices);
     }
@@ -178,7 +176,7 @@ public class ProductionBatchServiceImpl
         }
         List<DeviceRecord> devices = deviceRecordMapper.selectList(
                 new LambdaQueryWrapper<DeviceRecord>().eq(DeviceRecord::getBatchId, batchId));
-        if (!isDeviceListSatisfied(batch, devices)) {
+        if (!isDeviceListSatisfied(batch, devices, manufacturerId)) {
             return;
         }
         finalizeBatchAndMaybeCompleteOrder(batch, manufacturerId, devices);
@@ -190,8 +188,11 @@ public class ProductionBatchServiceImpl
                 && !"COMPLETED".equals(batch.getStatus());
     }
 
-    /** 与 completeBatch 中设备条件一致（不抛异常，供自动完工判断） */
-    private boolean isDeviceListSatisfied(ProductionBatch batch, List<DeviceRecord> devices) {
+    /**
+     * 与 completeBatch 中设备条件一致（不抛异常，供自动完工判断）。
+     * 合格品：QC_PASS 且已上链。不合格品：REJECTED 且退货/销毁处置已完结并有链上完结凭证。
+     */
+    private boolean isDeviceListSatisfied(ProductionBatch batch, List<DeviceRecord> devices, Long manufacturerId) {
         if (devices.isEmpty()) {
             return false;
         }
@@ -199,14 +200,63 @@ public class ProductionBatchServiceImpl
             return false;
         }
         for (DeviceRecord d : devices) {
-            if (d.getChainRegistered() == null || d.getChainRegistered() != 1) {
-                return false;
-            }
-            if (!Constants.QC_PASS.equals(d.getStatus())) {
+            if (!isDeviceReadyForBatchClose(d, manufacturerId)) {
                 return false;
             }
         }
         return true;
+    }
+
+    private void assertDeviceReadyForBatchClose(DeviceRecord d, Long manufacturerId) {
+        if (Constants.QC_PASS.equals(d.getStatus())) {
+            if (d.getChainRegistered() == null || d.getChainRegistered() != 1) {
+                throw new BusinessException("存在未上链的 ECID: " + d.getEcid());
+            }
+            return;
+        }
+        if (Constants.REJECTED.equals(d.getStatus())) {
+            RejectRecord rr = findLatestCompletedDisposal(d.getEcid(), manufacturerId);
+            if (rr == null) {
+                throw new BusinessException("不合格设备尚未完成退货/销毁闭环，无法批次完工: " + d.getEcid());
+            }
+            if (!hasDisposalOnChainEvidence(d, rr)) {
+                throw new BusinessException("不合格设备处置完结尚未上链归档，无法批次完工: " + d.getEcid());
+            }
+            return;
+        }
+        throw new BusinessException("存在未质检合格的 ECID: " + d.getEcid());
+    }
+
+    private boolean isDeviceReadyForBatchClose(DeviceRecord d, Long manufacturerId) {
+        if (Constants.QC_PASS.equals(d.getStatus())) {
+            return d.getChainRegistered() != null && d.getChainRegistered() == 1;
+        }
+        if (Constants.REJECTED.equals(d.getStatus())) {
+            RejectRecord rr = findLatestCompletedDisposal(d.getEcid(), manufacturerId);
+            return rr != null && hasDisposalOnChainEvidence(d, rr);
+        }
+        return false;
+    }
+
+    private RejectRecord findLatestCompletedDisposal(String ecid, Long manufacturerId) {
+        if (!StringUtils.hasText(ecid) || manufacturerId == null) {
+            return null;
+        }
+        return rejectRecordService.getOne(
+                new LambdaQueryWrapper<RejectRecord>()
+                        .eq(RejectRecord::getEcid, ecid)
+                        .eq(RejectRecord::getManufacturerId, manufacturerId)
+                        .eq(RejectRecord::getDisposalStatus, Constants.DISPOSAL_COMPLETED)
+                        .orderByDesc(RejectRecord::getId)
+                        .last("LIMIT 1"));
+    }
+
+    /** 设备表已标记上链，或不合格记录上存有处置完结锚定哈希（兼容历史数据） */
+    private boolean hasDisposalOnChainEvidence(DeviceRecord d, RejectRecord rr) {
+        if (d.getChainRegistered() != null && d.getChainRegistered() == 1) {
+            return true;
+        }
+        return rr != null && StringUtils.hasText(rr.getDisposalCompleteTxHash());
     }
 
     private void finalizeBatchAndMaybeCompleteOrder(ProductionBatch batch, Long manufacturerId,

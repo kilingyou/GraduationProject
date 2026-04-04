@@ -45,7 +45,7 @@
             :closable="false"
             show-icon
             class="batch-hint"
-            title="「完成数量」= 本批已生成 ECID 数（≤计划），不等于已完工。点「批次完工」时后端校验：设备数≥计划、每台均已上链且质检合格 → 状态变「已完成」；满足条件时也可自动完工。"
+            title="「完成数量」= 本批已生成 ECID 数（≤计划）。批次完工条件：设备数≥计划；合格品须质检通过且已上链；不合格品须已完成退货/销毁闭环且处置已上链。满足后状态变「已完成」，也可在满足条件时自动完工。"
           />
 
           <el-table v-loading="batchLoading" :data="batchList" stripe border style="width: 100%">
@@ -344,7 +344,7 @@ function goToEcidTab(row) {
 async function handleBatchComplete(row) {
   try {
     await ElMessageBox.confirm(
-      '确认批次完工？要求：本批次全部 ECID 已链上注册且质检标记为合格。若本订单下所有批次均已完工，订单将自动变为「已完成」。',
+      '确认批次完工？要求：每台设备要么「质检合格且已上链」，要么「质检不合格但已完成退货/销毁闭环且处置已上链」。若本订单下所有批次均已完工，订单将自动变为「已完成」。',
       '批次完工',
       { type: 'warning' }
     )
