@@ -1,7 +1,9 @@
 package com.scm.module.assembler.controller;
 
 import com.alibaba.excel.EasyExcel;
+import com.scm.common.PageResult;
 import com.scm.common.Result;
+import com.scm.module.assembler.dto.AvailableAssemblyEcidItem;
 import com.scm.module.assembler.dto.EcidImportRow;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
 import com.scm.module.assembler.service.AssemblerIntakeService;
@@ -26,6 +28,17 @@ public class IntakeController {
     public Result<IntakeVerifyResult> scan(@RequestBody Map<String, String> body) {
         String ecid = body.get("ecid");
         return Result.ok(assemblerIntakeService.verifyEcid(ecid));
+    }
+
+    /**
+     * 组装记录 ECID 下拉：与部件入库校验通过条件一致（质检合格、已上链、未绑定整机）。
+     */
+    @GetMapping("/available-ecids")
+    public Result<PageResult<AvailableAssemblyEcidItem>> availableEcids(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "50") int pageSize) {
+        return Result.ok(assemblerIntakeService.pageAvailableEcidsForAssembly(keyword, pageNum, pageSize));
     }
 
     /**

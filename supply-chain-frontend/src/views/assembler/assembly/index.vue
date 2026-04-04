@@ -103,11 +103,23 @@
                     v-model="recordForm.ecidList"
                     multiple
                     filterable
+                    remote
+                    reserve-keyword
                     allow-create
                     default-first-option
-                    placeholder="输入 ECID 后回车添加"
+                    :remote-method="remoteSearchEcids"
+                    :loading="ecidOptionsLoading"
+                    placeholder="点击展开或输入关键字筛选；与部件入库验证通过条件一致，也可手动输入后回车"
                     style="width: 100%"
-                  />
+                    @focus="onEcidSelectFocus"
+                  >
+                    <el-option
+                      v-for="item in ecidOptions"
+                      :key="item.ecid"
+                      :label="ecidOptionLabel(item)"
+                      :value="item.ecid"
+                    />
+                  </el-select>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -123,8 +135,28 @@
         </el-card>
 
         <el-table :data="recordList" v-loading="recordLoading" border stripe>
-          <el-table-column prop="sn" label="SN" width="200" />
-          <el-table-column prop="assemblyBatchNo" label="批次号" width="200" />
+          <el-table-column prop="sn" label="SN" width="200">
+            <template #default="{ row }">
+              <span
+                v-if="row.sn"
+                class="copy-cell"
+                title="点击复制"
+                @click.stop="copyText(row.sn, 'SN')"
+              >{{ row.sn }}</span>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="assemblyBatchNo" label="批次号" width="200">
+            <template #default="{ row }">
+              <span
+                v-if="row.assemblyBatchNo"
+                class="copy-cell"
+                title="点击复制"
+                @click.stop="copyText(row.assemblyBatchNo, '批次号')"
+              >{{ row.assemblyBatchNo }}</span>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="ecidList" label="ECID列表" min-width="200">
             <template #default="{ row }">
               <el-tag v-for="e in (row.ecidList || [])" :key="e" size="small" class="ecid-tag">{{ e }}</el-tag>
@@ -177,13 +209,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   createAssemblyBatch, getAssemblyBatchList,
   createAssemblyRecord, getAssemblyRecordList,
-  registerAssemblyOnChain
+  registerAssemblyOnChain,
+  getAvailableIntakeEcids
 } from '@/api/assembler'
+import { useUserStore } from '@/store/user'
 
 const activeTab = ref('batch')
 
@@ -257,6 +291,71 @@ const recordFilterBatchNo = ref('')
 const generatedSn = ref('')
 const exportLoading = ref(false)
 
+const ecidOptions = ref([])
+const ecidOptionsLoading = ref(false)
+let ecidOptionsPrimed = false
+
+function ecidOptionLabel(item) {
+  if (!item?.ecid) return ''
+  const t = item.deviceType || '—'
+  const b = item.batchId ? ` · ${item.batchId}` : ''
+  return `${item.ecid} (${t}${b})`
+}
+
+async function remoteSearchEcids(query) {
+  ecidOptionsLoading.value = true
+  try {
+    const res = await getAvailableIntakeEcids({
+      keyword: (query || '').trim(),
+      pageNum: 1,
+      pageSize: 100
+    })
+    ecidOptions.value = res.data?.records || []
+  } catch {
+    ecidOptions.value = []
+  } finally {
+    ecidOptionsLoading.value = false
+  }
+}
+
+async function onEcidSelectFocus() {
+  if (!ecidOptionsPrimed) {
+    ecidOptionsPrimed = true
+    await remoteSearchEcids('')
+  }
+}
+
+function refreshEcidOptions() {
+  ecidOptionsPrimed = false
+  remoteSearchEcids('')
+}
+
+async function copyText(value, label = '内容') {
+  if (value == null || String(value).trim() === '') {
+    ElMessage.warning('无可复制内容')
+    return
+  }
+  const text = String(value)
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success(`已复制${label}`)
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      ElMessage.success(`已复制${label}`)
+    } catch {
+      ElMessage.error('复制失败，请手动选择文本复制')
+    }
+  }
+}
+
 function normalizeEcidList(r) {
   let ecids = []
   if (Array.isArray(r.ecidList)) {
@@ -312,6 +411,7 @@ async function handleCreateRecord() {
     recordFormRef.value.resetFields()
     recordForm.ecidList = []
     recordForm.sn = ''
+    refreshEcidOptions()
     loadRecords()
     loadBatches()
   } catch (e) {
@@ -363,6 +463,12 @@ async function handleRegister(row) {
   }
 }
 
+watch(activeTab, (name) => {
+  if (name === 'record') {
+    onEcidSelectFocus()
+  }
+})
+
 onMounted(() => {
   loadBatches()
   loadRecords()
@@ -384,5 +490,13 @@ onMounted(() => {
 }
 .ecid-tag {
   margin: 2px 4px 2px 0;
+}
+.copy-cell {
+  cursor: pointer;
+  color: var(--el-color-primary);
+  word-break: break-all;
+  &:hover {
+    text-decoration: underline;
+  }
 }
 </style>

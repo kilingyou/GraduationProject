@@ -2,8 +2,11 @@ package com.scm.module.assembler.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scm.common.Constants;
+import com.scm.common.PageResult;
+import com.scm.module.assembler.dto.AvailableAssemblyEcidItem;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
 import com.scm.module.assembler.entity.AssemblyRecord;
+import com.scm.module.assembler.mapper.AssemblerIntakeQueryMapper;
 import com.scm.module.assembler.mapper.AssemblyRecordMapper;
 import com.scm.module.assembler.service.AssemblerIntakeService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,6 +26,7 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
 
     private final DeviceRecordService deviceRecordService;
     private final AssemblyRecordMapper assemblyRecordMapper;
+    private final AssemblerIntakeQueryMapper assemblerIntakeQueryMapper;
 
     @Override
     public IntakeVerifyResult verifyEcid(String ecid) {
@@ -87,5 +92,28 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
             out.add(verifyEcid(e));
         }
         return out;
+    }
+
+    @Override
+    public PageResult<AvailableAssemblyEcidItem> pageAvailableEcidsForAssembly(String keyword, int pageNum, int pageSize) {
+        String kw = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        int pn = Math.max(1, pageNum);
+        int ps = Math.min(200, Math.max(1, pageSize));
+        long total = assemblerIntakeQueryMapper.countAvailableForAssembly(Constants.QC_PASS, kw);
+        if (total == 0) {
+            return new PageResult<AvailableAssemblyEcidItem>()
+                    .setRecords(Collections.emptyList())
+                    .setTotal(0)
+                    .setCurrent(pn)
+                    .setSize(ps);
+        }
+        long offset = (long) (pn - 1) * ps;
+        List<AvailableAssemblyEcidItem> records = assemblerIntakeQueryMapper.listAvailableForAssembly(
+                Constants.QC_PASS, kw, offset, ps);
+        return new PageResult<AvailableAssemblyEcidItem>()
+                .setRecords(records)
+                .setTotal(total)
+                .setCurrent(pn)
+                .setSize(ps);
     }
 }
