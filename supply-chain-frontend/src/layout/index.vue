@@ -30,14 +30,29 @@
                   <el-icon><component :is="top.icon || 'FolderOpened'" /></el-icon>
                   <span>{{ top.menuName }}</span>
                 </template>
-                <el-menu-item
-                  v-for="child in top.children"
-                  :key="child.id || child.path"
-                  :index="child.path"
-                >
-                  <el-icon><component :is="child.icon || 'Document'" /></el-icon>
-                  <span>{{ child.menuName }}</span>
-                </el-menu-item>
+                <template v-for="child in top.children" :key="child.id || child.path">
+                  <el-sub-menu
+                    v-if="child.children && child.children.length > 0"
+                    :index="child.path || String(child.id)"
+                  >
+                    <template #title>
+                      <el-icon><component :is="child.icon || 'FolderOpened'" /></el-icon>
+                      <span>{{ child.menuName }}</span>
+                    </template>
+                    <el-menu-item
+                      v-for="sub in child.children"
+                      :key="sub.id || sub.path"
+                      :index="sub.path"
+                    >
+                      <el-icon><component :is="sub.icon || 'Document'" /></el-icon>
+                      <span>{{ sub.menuName }}</span>
+                    </el-menu-item>
+                  </el-sub-menu>
+                  <el-menu-item v-else :index="child.path">
+                    <el-icon><component :is="child.icon || 'Document'" /></el-icon>
+                    <span>{{ child.menuName }}</span>
+                  </el-menu-item>
+                </template>
               </el-sub-menu>
               <el-menu-item v-else-if="top.path" :index="top.path">
                 <el-icon><component :is="top.icon || 'Document'" /></el-icon>
@@ -52,14 +67,32 @@
                   <el-icon><component :is="route.meta?.icon" /></el-icon>
                   <span>{{ route.meta?.title }}</span>
                 </template>
-                <el-menu-item
-                  v-for="child in route.children"
-                  :key="child.path"
-                  :index="joinPath(route.path, child.path)"
-                >
-                  <el-icon><component :is="child.meta?.icon" /></el-icon>
-                  <span>{{ child.meta?.title }}</span>
-                </el-menu-item>
+                <template v-for="child in route.children" :key="child.path || child.name">
+                  <el-sub-menu
+                    v-if="child.children && child.children.length > 0"
+                    :index="joinPath(route.path, child.path)"
+                  >
+                    <template #title>
+                      <el-icon><component :is="child.meta?.icon" /></el-icon>
+                      <span>{{ child.meta?.title }}</span>
+                    </template>
+                    <el-menu-item
+                      v-for="sub in child.children"
+                      :key="sub.path"
+                      :index="joinPath(joinPath(route.path, child.path), sub.path)"
+                    >
+                      <el-icon><component :is="sub.meta?.icon" /></el-icon>
+                      <span>{{ sub.meta?.title }}</span>
+                    </el-menu-item>
+                  </el-sub-menu>
+                  <el-menu-item
+                    v-else
+                    :index="joinPath(route.path, child.path)"
+                  >
+                    <el-icon><component :is="child.meta?.icon" /></el-icon>
+                    <span>{{ child.meta?.title }}</span>
+                  </el-menu-item>
+                </template>
               </el-sub-menu>
 
               <el-menu-item

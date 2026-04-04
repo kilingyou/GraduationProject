@@ -127,9 +127,9 @@ const roleActions = {
     { label: '部件入库', path: '/assembler/intake', icon: 'Box', type: 'primary' },
     { label: '组装管理', path: '/assembler/assembly', icon: 'Connection' },
     { label: '整机质检', path: '/assembler/quality', icon: 'Checked' },
-    { label: '物流流转', path: '/distributor/logistics', icon: 'Ship' },
-    { label: '渠道库存', path: '/distributor/inventory', icon: 'GoodsFilled' },
-    { label: '销售登记', path: '/distributor/sales', icon: 'Sell' },
+    { label: '物流流转', path: '/assembler/circulation/logistics', icon: 'Ship' },
+    { label: '渠道库存', path: '/assembler/circulation/inventory', icon: 'GoodsFilled' },
+    { label: '销售登记', path: '/assembler/circulation/sales', icon: 'Sell' },
     { label: '数据看板', path: '/assembler/dashboard', icon: 'DataAnalysis' }
   ],
   distributor: [

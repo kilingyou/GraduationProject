@@ -78,17 +78,40 @@ export const constantRoutes = [
       { path: 'intake', name: 'CompIntake', component: () => import('@/views/assembler/intake/index.vue'), meta: { title: '部件入库', icon: 'Box' } },
       { path: 'assembly', name: 'Assembly', component: () => import('@/views/assembler/assembly/index.vue'), meta: { title: '组装管理', icon: 'Connection' } },
       { path: 'quality', name: 'AsmQuality', component: () => import('@/views/assembler/quality/index.vue'), meta: { title: '整机质检', icon: 'Checked' } },
+      {
+        path: 'circulation',
+        name: 'AsmCirculation',
+        component: () => import('@/views/assembler/circulation/ParentView.vue'),
+        redirect: { name: 'AsmCircLogistics' },
+        meta: { title: '渠道流通', icon: 'Van' },
+        children: [
+          {
+            path: 'logistics',
+            name: 'AsmCircLogistics',
+            component: () => import('@/views/distributor/logistics/index.vue'),
+            meta: { title: '物流流转', icon: 'Ship' }
+          },
+          {
+            path: 'inventory',
+            name: 'AsmCircInventory',
+            component: () => import('@/views/distributor/inventory/index.vue'),
+            meta: { title: '库存管理', icon: 'GoodsFilled' }
+          },
+          {
+            path: 'sales',
+            name: 'AsmCircSales',
+            component: () => import('@/views/distributor/sales/index.vue'),
+            meta: { title: '销售记录', icon: 'Sell' }
+          }
+        ]
+      },
       { path: 'dashboard', name: 'AsmDashboard', component: () => import('@/views/assembler/dashboard/index.vue'), meta: { title: '数据看板', icon: 'DataAnalysis' } }
     ]
   },
   {
     path: '/distributor',
     component: Layout,
-    meta: {
-      title: '分销管理',
-      icon: 'Van',
-      roles: ['admin', 'distributor', 'assembler']
-    },
+    meta: { title: '分销管理', icon: 'Van', roles: ['admin', 'distributor'] },
     children: [
       { path: 'logistics', name: 'Logistics', component: () => import('@/views/distributor/logistics/index.vue'), meta: { title: '物流流转', icon: 'Ship' } },
       { path: 'inventory', name: 'Inventory', component: () => import('@/views/distributor/inventory/index.vue'), meta: { title: '库存管理', icon: 'GoodsFilled' } },

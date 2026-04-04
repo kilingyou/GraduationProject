@@ -3,5 +3,6 @@
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter_assembly_current_holder.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter_sales_privacy_segment.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/patch-assembler-channel-menus.sql" dialect="MySQL" />
   </component>
 </project>

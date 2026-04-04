@@ -44,6 +44,9 @@ function buildRoutes(menus, parentPath = '') {
     if (menu.children && menu.children.length > 0) {
       route.children = buildRoutes(menu.children, menu.path)
       route.redirect = menu.children[0]?.path
+      if (!route.component) {
+        route.component = () => import('@/views/assembler/circulation/ParentView.vue')
+      }
     }
 
     return route
