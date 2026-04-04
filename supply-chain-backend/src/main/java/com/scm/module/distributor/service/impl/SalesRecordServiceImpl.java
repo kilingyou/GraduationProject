@@ -34,7 +34,8 @@ public class SalesRecordServiceImpl
 
     @Override
     public SalesRecord registerSale(String sn, LocalDateTime saleTime, String customerName, String customerPhone,
-                                    MultipartFile invoice, Long sellerId) throws IOException {
+                                    MultipartFile invoice, Long sellerId, boolean anonymous, String customerSegment)
+            throws IOException {
         if (sn == null || sn.trim().isEmpty()) {
             throw new BusinessException("SN 不能为空");
         }
@@ -60,13 +61,26 @@ public class SalesRecordServiceImpl
         SalesRecord sale = new SalesRecord();
         sale.setSn(snNorm);
         sale.setSellerId(sellerId);
-        sale.setSaleTime(saleTime != null ? saleTime : LocalDateTime.now());
+        LocalDateTime st = saleTime != null ? saleTime : LocalDateTime.now();
+        sale.setSaleTime(st);
 
-        String cn = customerName != null ? customerName : "";
-        String cp = customerPhone != null ? customerPhone : "";
-        sale.setCustomerNameEnc(Base64.getEncoder().encodeToString(cn.getBytes(StandardCharsets.UTF_8)));
-        sale.setCustomerPhoneEnc(Base64.getEncoder().encodeToString(cp.getBytes(StandardCharsets.UTF_8)));
-        sale.setCustomerHash(HashUtil.sha256Hex((cn + "|" + cp).getBytes(StandardCharsets.UTF_8)));
+        if (anonymous) {
+            sale.setCustomerAnonymous(1);
+            sale.setCustomerNameEnc(null);
+            sale.setCustomerPhoneEnc(null);
+            String anonPayload = "ANONYMOUS|" + snNorm + "|" + st;
+            sale.setCustomerHash(HashUtil.sha256Hex(anonPayload.getBytes(StandardCharsets.UTF_8)));
+        } else {
+            sale.setCustomerAnonymous(0);
+            String cn = customerName != null ? customerName : "";
+            String cp = customerPhone != null ? customerPhone : "";
+            sale.setCustomerNameEnc(Base64.getEncoder().encodeToString(cn.getBytes(StandardCharsets.UTF_8)));
+            sale.setCustomerPhoneEnc(Base64.getEncoder().encodeToString(cp.getBytes(StandardCharsets.UTF_8)));
+            sale.setCustomerHash(HashUtil.sha256Hex((cn + "|" + cp).getBytes(StandardCharsets.UTF_8)));
+        }
+        if (customerSegment != null && !customerSegment.trim().isEmpty()) {
+            sale.setCustomerSegment(customerSegment.trim().toUpperCase());
+        }
 
         String invoiceHashPart = "";
         if (invoice != null && !invoice.isEmpty()) {

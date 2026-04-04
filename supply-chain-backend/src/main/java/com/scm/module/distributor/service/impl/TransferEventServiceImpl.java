@@ -71,6 +71,7 @@ public class TransferEventServiceImpl
         LocalDateTime st = shipTime != null ? shipTime : LocalDateTime.now();
         TransferEvent te = new TransferEvent()
                 .setSn(snNorm)
+                .setBatchNo(ar.getAssemblyBatchNo())
                 .setLogisticsCompany(logisticsCompany.trim())
                 .setTrackingNumber(trackingNumber.trim())
                 .setSenderId(senderId)

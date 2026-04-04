@@ -31,14 +31,17 @@ public class SalesController {
             @RequestParam(required = false) String saleTime,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String customerPhone,
+            @RequestParam(required = false) String anonymous,
+            @RequestParam(required = false) String customerSegment,
             @RequestPart(value = "invoice", required = false) MultipartFile invoice) throws IOException {
         LoginUser loginUser = getCurrentUser();
         LocalDateTime st = null;
         if (saleTime != null && !saleTime.trim().isEmpty()) {
             st = LocalDateTime.ofInstant(Instant.parse(saleTime), ZoneId.systemDefault());
         }
+        boolean anon = "true".equalsIgnoreCase(anonymous) || "1".equals(anonymous);
         SalesRecord created = salesRecordService.registerSale(sn, st, customerName, customerPhone, invoice,
-                loginUser.getUserId());
+                loginUser.getUserId(), anon, customerSegment);
         return Result.ok(created);
     }
 

@@ -84,7 +84,11 @@ export const constantRoutes = [
   {
     path: '/distributor',
     component: Layout,
-    meta: { title: '分销管理', icon: 'Van', roles: ['admin', 'distributor'] },
+    meta: {
+      title: '分销管理',
+      icon: 'Van',
+      roles: ['admin', 'distributor', 'assembler']
+    },
     children: [
       { path: 'logistics', name: 'Logistics', component: () => import('@/views/distributor/logistics/index.vue'), meta: { title: '物流流转', icon: 'Ship' } },
       { path: 'inventory', name: 'Inventory', component: () => import('@/views/distributor/inventory/index.vue'), meta: { title: '库存管理', icon: 'GoodsFilled' } },

@@ -365,6 +365,8 @@ CREATE TABLE bus_sales_record (
     customer_hash         VARCHAR(128) COMMENT '客户身份哈希(隐私)',
     customer_name_enc     VARCHAR(300) COMMENT '加密客户姓名(仅本地)',
     customer_phone_enc    VARCHAR(300) COMMENT '加密客户手机(仅本地)',
+    customer_anonymous    TINYINT      NOT NULL DEFAULT 0 COMMENT '1=匿名销售',
+    customer_segment      VARCHAR(16)  COMMENT 'B2B/B2C',
     invoice_hash          VARCHAR(128) COMMENT '销售凭证哈希',
     invoice_cid           VARCHAR(200) COMMENT '销售凭证IPFS CID',
     tx_hash               VARCHAR(128),

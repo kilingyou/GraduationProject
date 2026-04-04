@@ -1,5 +1,13 @@
 <template>
   <div class="app-container">
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      class="mb-16"
+      title="流通渠道职责：在货权发生转移时登记物流单号、时间与接收方，系统会锚定 TRANSFER_EVENT / TRANSFER_RECEIVE；组装商将整机交给下游分销商时，同样在此发货并由对方「确认收货」完成货权交接。"
+    />
+
     <!-- Action Cards -->
     <el-row :gutter="20" class="mb-16">
       <el-col :span="12">
@@ -58,6 +66,9 @@
           <el-card shadow="never">
             <p><strong>{{ evt.type }}</strong> — {{ evt.description }}</p>
             <p v-if="evt.logisticsNo">物流单号：{{ evt.logisticsNo }}</p>
+            <p v-if="evt.logisticsCompany">物流公司：{{ evt.logisticsCompany }}</p>
+            <p v-if="evt.assemblyBatchNo">组装批次：{{ evt.assemblyBatchNo }}</p>
+            <p v-if="evt.txHash" class="hash-line">链上摘要 Tx：{{ evt.txHash }}</p>
           </el-card>
         </el-timeline-item>
       </el-timeline>
@@ -74,11 +85,12 @@
       <el-table :data="transferList" v-loading="listLoading" border stripe>
         <el-table-column prop="trackingNumber" label="物流单号" width="180" />
         <el-table-column prop="sn" label="产品SN" width="180" />
+        <el-table-column prop="batchNo" label="组装批次" width="160" show-overflow-tooltip />
         <el-table-column prop="senderId" label="发货方ID" width="100" />
         <el-table-column prop="receiverId" label="收货方ID" width="100" />
-        <el-table-column prop="type" label="类型" width="100" align="center">
+        <el-table-column prop="transferType" label="流转类型" width="120" align="center">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.type }}</el-tag>
+            <el-tag size="small">{{ transferTypeLabel(row.transferType) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
@@ -113,8 +125,38 @@
         <el-form-item label="物流单号" prop="trackingNo">
           <el-input v-model="shipForm.trackingNo" placeholder="请输入物流单号" />
         </el-form-item>
-        <el-form-item label="接收方ID" prop="receiverId">
-          <el-input-number v-model="shipForm.receiverId" :min="1" :controls="false" placeholder="系统用户ID" style="width: 100%" />
+        <el-form-item label="流转场景" prop="transferType">
+          <el-select v-model="shipForm.transferType" placeholder="选择类型" style="width: 100%">
+            <el-option label="标准发货 (SHIP)" value="SHIP" />
+            <el-option label="渠道 → 制造商" value="CHANNEL_TO_MFG" />
+            <el-option label="→ 组装商" value="TO_ASSEMBLER" />
+            <el-option label="→ 分销商" value="TO_DISTRIBUTOR" />
+            <el-option label="→ 零售/二级渠道" value="TO_RETAIL" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="接收方" prop="receiverId">
+          <el-select
+            placeholder="快速选择对接企业（可选）"
+            filterable
+            clearable
+            style="width: 100%"
+            @change="onShipReceiverPick"
+          >
+            <el-option
+              v-for="u in partnerUserOptions"
+              :key="u.id"
+              :label="partnerLabel(u)"
+              :value="u.id"
+            />
+          </el-select>
+          <el-input-number
+            v-model="shipForm.receiverId"
+            :min="1"
+            :controls="false"
+            placeholder="接收方用户 ID（必填，可与上栏联动）"
+            style="width: 100%; margin-top: 8px"
+          />
+          <div class="field-hint">用户 ID 可在「系统管理-用户管理」中查看；列表聚合分销商/组装商/制造商账号。</div>
         </el-form-item>
         <el-form-item label="发货时间" prop="shipTime">
           <el-date-picker
@@ -140,8 +182,35 @@
         <el-form-item label="物流单号" required>
           <el-input v-model="batchForm.trackingNo" placeholder="整批共用单号" />
         </el-form-item>
-        <el-form-item label="接收方ID" required>
-          <el-input-number v-model="batchForm.receiverId" :min="1" :controls="false" style="width: 100%" />
+        <el-form-item label="流转场景">
+          <el-select v-model="batchForm.transferType" style="width: 100%">
+            <el-option label="标准发货 (SHIP)" value="SHIP" />
+            <el-option label="→ 分销商" value="TO_DISTRIBUTOR" />
+            <el-option label="→ 零售/二级渠道" value="TO_RETAIL" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="接收方" required>
+          <el-select
+            placeholder="快速选择"
+            filterable
+            clearable
+            style="width: 100%"
+            @change="onBatchReceiverPick"
+          >
+            <el-option
+              v-for="u in partnerUserOptions"
+              :key="u.id"
+              :label="partnerLabel(u)"
+              :value="u.id"
+            />
+          </el-select>
+          <el-input-number
+            v-model="batchForm.receiverId"
+            :min="1"
+            :controls="false"
+            style="width: 100%; margin-top: 8px"
+            placeholder="接收方用户 ID"
+          />
         </el-form-item>
         <el-form-item label="装箱单">
           <el-upload
@@ -185,6 +254,55 @@ import {
   shipProducts, receiveProducts, getTransferList, trackProduct,
   shipBatchProducts, downloadSnShipTemplate
 } from '@/api/distributor'
+import { getUserList } from '@/api/system'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+const partnerUserOptions = ref([])
+
+function partnerLabel(u) {
+  const ent = u.enterpriseName || u.contactPerson || '—'
+  return `${u.username} · ${ent} (ID ${u.id})`
+}
+
+function transferTypeLabel(tt) {
+  const m = {
+    SHIP: '发货',
+    CHANNEL_TO_MFG: '渠道→制造商',
+    TO_ASSEMBLER: '→组装商',
+    TO_DISTRIBUTOR: '→分销商',
+    TO_RETAIL: '→零售'
+  }
+  return m[tt] || tt || '—'
+}
+
+async function loadPartnerUsers() {
+  const roles = ['distributor', 'assembler', 'manufacturer']
+  const byId = new Map()
+  const selfId = userStore.userId
+  try {
+    for (const roleKey of roles) {
+      const res = await getUserList({ page: 1, size: 500, roleKey })
+      const rows = res.data?.records || res.data?.list || []
+      for (const u of rows) {
+        if (u.id != null && u.id !== selfId && !byId.has(u.id)) {
+          byId.set(u.id, u)
+        }
+      }
+    }
+    partnerUserOptions.value = Array.from(byId.values())
+  } catch {
+    partnerUserOptions.value = []
+  }
+}
+
+function onShipReceiverPick(id) {
+  if (id != null && id !== '') shipForm.receiverId = id
+}
+
+function onBatchReceiverPick(id) {
+  if (id != null && id !== '') batchForm.receiverId = id
+}
 
 // ---- Transfer List ----
 const listLoading = ref(false)
@@ -216,7 +334,14 @@ function transferStatusLabel(s) {
 // ---- Ship ----
 const shipDialogVisible = ref(false)
 const shipFormRef = ref()
-const shipForm = reactive({ sn: '', logisticsCompany: '', trackingNo: '', receiverId: null, shipTime: null })
+const shipForm = reactive({
+  sn: '',
+  logisticsCompany: '',
+  trackingNo: '',
+  receiverId: undefined,
+  shipTime: null,
+  transferType: 'SHIP'
+})
 const shipRules = {
   sn: [{ required: true, message: '请输入 SN', trigger: 'blur' }],
   logisticsCompany: [{ required: true, message: '请输入物流公司', trigger: 'blur' }],
@@ -230,13 +355,17 @@ async function handleShip() {
   if (!valid) return
   shipSubmitting.value = true
   try {
-    await shipProducts({
+    const payload = {
       sn: shipForm.sn.trim(),
       logisticsCompany: shipForm.logisticsCompany,
       trackingNumber: shipForm.trackingNo,
       receiverId: shipForm.receiverId,
-      transferType: 'SHIP'
-    })
+      transferType: shipForm.transferType || 'SHIP'
+    }
+    if (shipForm.shipTime) {
+      payload.shipTime = shipForm.shipTime instanceof Date ? shipForm.shipTime.toISOString() : shipForm.shipTime
+    }
+    await shipProducts(payload)
     ElMessage.success('发货成功')
     shipDialogVisible.value = false
     loadTransfers()
@@ -296,7 +425,7 @@ async function handleTrack() {
 }
 
 const batchDialogVisible = ref(false)
-const batchForm = reactive({ logisticsCompany: '', trackingNo: '', receiverId: null })
+const batchForm = reactive({ logisticsCompany: '', trackingNo: '', receiverId: undefined, transferType: 'SHIP' })
 const batchFile = ref(null)
 const batchSubmitting = ref(false)
 
@@ -330,6 +459,7 @@ async function handleBatchShip() {
     fd.append('logisticsCompany', batchForm.logisticsCompany.trim())
     fd.append('trackingNumber', batchForm.trackingNo.trim())
     fd.append('receiverId', String(batchForm.receiverId))
+    if (batchForm.transferType) fd.append('transferType', batchForm.transferType)
     await shipBatchProducts(fd)
     ElMessage.success('批量发货已提交')
     batchDialogVisible.value = false
@@ -342,7 +472,10 @@ async function handleBatchShip() {
   }
 }
 
-onMounted(loadTransfers)
+onMounted(() => {
+  loadPartnerUsers()
+  loadTransfers()
+})
 </script>
 
 <style scoped lang="scss">
@@ -372,6 +505,17 @@ onMounted(loadTransfers)
     align-items: center;
     gap: 16px;
   }
+}
+.field-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.hash-line {
+  font-size: 12px;
+  color: #606266;
+  word-break: break-all;
 }
 .action-card__text {
   h3 {

@@ -199,6 +199,11 @@
             <el-empty v-if="!salesRecord" description="暂无该 SN 的销售登记记录" />
             <el-descriptions v-else :column="2" border size="small">
               <el-descriptions-item label="销售时间">{{ salesRecord.saleTime || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="客户类型">{{ salesRecord.customerSegment || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="匿名销售">
+                <el-tag v-if="salesRecord.customerAnonymous === 1" size="small" type="warning">是（链上仅摘要）</el-tag>
+                <span v-else>否</span>
+              </el-descriptions-item>
               <el-descriptions-item label="客户哈希">{{ salesRecord.customerHash || '-' }}</el-descriptions-item>
               <el-descriptions-item label="发票哈希">{{ salesRecord.invoiceHash || '-' }}</el-descriptions-item>
               <el-descriptions-item label="发票 CID">{{ salesRecord.invoiceCid || '-' }}</el-descriptions-item>

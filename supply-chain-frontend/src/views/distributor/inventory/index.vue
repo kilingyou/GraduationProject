@@ -9,7 +9,7 @@
       </template>
 
       <el-alert type="info" :closable="false" show-icon class="mb-16"
-        title="列表展示当前货权（current_holder_id）在您名下的整机；组装商发货后收货方需在「物流流转」确认收货后，商品状态变为在库。若数据库为旧版，请执行后端 db/alter_assembly_current_holder.sql。" />
+        title="货权视图：current_holder_id 在您名下的整机（分销商、组装商等任一环节用户均可持有货权）。发货后对方在「物流流转」确认收货后变为在库。旧库请执行 alter_assembly_current_holder.sql。" />
 
       <!-- Filters -->
       <el-row :gutter="16" class="mb-16">

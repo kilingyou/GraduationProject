@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +65,8 @@ public class LogisticsController {
             @RequestParam String trackingNumber,
             @RequestParam Long receiverId,
             @RequestParam(required = false) String shipTimeIso,
-            @RequestParam(required = false) String estimatedArrivalIso) throws IOException {
+            @RequestParam(required = false) String estimatedArrivalIso,
+            @RequestParam(required = false) String transferType) throws IOException {
         LoginUser u = getCurrentUser();
         if (file == null || file.isEmpty()) {
             return Result.fail("请上传文件");
@@ -87,8 +89,9 @@ public class LogisticsController {
         if (StringUtils.hasText(estimatedArrivalIso)) {
             eta = java.time.LocalDateTime.ofInstant(java.time.Instant.parse(estimatedArrivalIso), java.time.ZoneId.systemDefault());
         }
+        String tt = StringUtils.hasText(transferType) ? transferType.trim() : "SHIP";
         List<TransferEvent> list = transferEventService.shipBatch(sns, u.getUserId(), receiverId,
-                logisticsCompany, trackingNumber, ship, eta, "SHIP");
+                logisticsCompany, trackingNumber, ship, eta, tt);
         return Result.ok(list);
     }
 
@@ -126,27 +129,69 @@ public class LogisticsController {
     }
 
     /**
-     * 前端时间轴：标准化字段 type / time / description / logisticsNo
+     * 溯源时间轴：按时间混排「发货」「收货确认」，含物流单号、收发方、组装批次、链上哈希摘要。
      */
     @GetMapping("/track/{sn}")
     public Result<List<Map<String, Object>>> track(@PathVariable String sn) {
         List<TransferEvent> events = transferEventService.listBySn(sn);
-        List<Map<String, Object>> out = new ArrayList<>();
+        List<Map<String, Object>> nodes = new ArrayList<>();
         for (TransferEvent e : events) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            String typeLabel = "SHIP".equalsIgnoreCase(e.getTransferType()) ? "发货" : (e.getTransferType() != null ? e.getTransferType() : "流转");
-            m.put("type", typeLabel);
-            m.put("time", e.getShipTime() != null ? e.getShipTime().toString()
-                    : (e.getCreateTime() != null ? e.getCreateTime().toString() : ""));
-            String desc = String.format("发件人ID %s → 收件人ID %s，状态 %s",
-                    e.getSenderId(), e.getReceiverId(), e.getStatus());
-            m.put("description", desc);
-            m.put("logisticsNo", e.getTrackingNumber());
-            m.put("logisticsCompany", e.getLogisticsCompany());
-            m.put("raw", e);
-            out.add(m);
+            LocalDateTime shipT = e.getShipTime() != null ? e.getShipTime() : e.getCreateTime();
+            if (shipT != null) {
+                nodes.add(buildTrackNode(e, "发货", shipT, false));
+            }
+            if ("RECEIVED".equalsIgnoreCase(e.getStatus()) && e.getActualArrival() != null) {
+                nodes.add(buildTrackNode(e, "收货确认", e.getActualArrival(), true));
+            }
         }
-        return Result.ok(out);
+        nodes.sort(Comparator.comparing(m -> (LocalDateTime) m.get("_sortTime"),
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        for (Map<String, Object> m : nodes) {
+            m.remove("_sortTime");
+        }
+        return Result.ok(nodes);
+    }
+
+    private static Map<String, Object> buildTrackNode(TransferEvent e, String typeLabel,
+                                                     LocalDateTime sortTime, boolean receiveLeg) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("type", typeLabel);
+        m.put("phase", receiveLeg ? "RECEIVE" : "SHIP");
+        m.put("_sortTime", sortTime);
+        m.put("time", sortTime.toString());
+        String flow = transferTypeLabel(e.getTransferType());
+        String desc = receiveLeg
+                ? String.format("%s：货权转至用户 %s（原发货方 %s）", flow, e.getReceiverId(), e.getSenderId())
+                : String.format("%s：用户 %s → 用户 %s，物流状态 %s", flow, e.getSenderId(), e.getReceiverId(), e.getStatus());
+        m.put("description", desc);
+        m.put("logisticsNo", e.getTrackingNumber());
+        m.put("logisticsCompany", e.getLogisticsCompany());
+        if (e.getBatchNo() != null && !e.getBatchNo().isEmpty()) {
+            m.put("assemblyBatchNo", e.getBatchNo());
+        }
+        m.put("txHash", receiveLeg ? e.getReceiveTxHash() : e.getTxHash());
+        m.put("raw", e);
+        return m;
+    }
+
+    private static String transferTypeLabel(String tt) {
+        if (tt == null || tt.isEmpty()) {
+            return "物流流转";
+        }
+        switch (tt.toUpperCase()) {
+            case "SHIP":
+                return "发货出库";
+            case "CHANNEL_TO_MFG":
+                return "渠道→制造商";
+            case "TO_ASSEMBLER":
+                return "→组装商";
+            case "TO_DISTRIBUTOR":
+                return "→分销商";
+            case "TO_RETAIL":
+                return "→零售/二级渠道";
+            default:
+                return tt;
+        }
     }
 
     @GetMapping("/sn-import-template")

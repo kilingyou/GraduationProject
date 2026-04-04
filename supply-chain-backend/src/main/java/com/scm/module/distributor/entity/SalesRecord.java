@@ -26,6 +26,12 @@ public class SalesRecord {
 
     private String customerPhoneEnc;
 
+    /** 1=匿名销售：链上仅存摘要，不落明文 */
+    private Integer customerAnonymous;
+
+    /** B2B / B2C */
+    private String customerSegment;
+
     private String invoiceHash;
 
     private String invoiceCid;

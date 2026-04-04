@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
 public interface SalesRecordService extends IService<SalesRecord> {
 
     SalesRecord registerSale(String sn, LocalDateTime saleTime, String customerName, String customerPhone,
-                             MultipartFile invoice, Long sellerId) throws IOException;
+                             MultipartFile invoice, Long sellerId, boolean anonymous, String customerSegment)
+            throws IOException;
 
     IPage<SalesRecord> listBySeller(Long sellerId, Page<SalesRecord> page);
 
