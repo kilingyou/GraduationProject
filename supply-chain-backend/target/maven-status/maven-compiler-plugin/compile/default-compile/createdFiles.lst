@@ -108,6 +108,7 @@ com\scm\module\system\controller\AuthController.class
 com\scm\module\enduser\controller\TraceController.class
 com\scm\module\supplier\mapper\BomMapper.class
 com\scm\module\distributor\dto\LogisticsShipRequest.class
+com\scm\module\assembler\dto\AssemblyQcBatchOutcome.class
 com\scm\module\supplier\service\DesignDocumentService.class
 com\scm\module\manufacturer\mapper\ManufacturingAgreementMapper.class
 com\scm\module\manufacturer\entity\RejectRecord.class

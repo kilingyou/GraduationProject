@@ -1,6 +1,5 @@
 <template>
   <div class="app-container">
-    <!-- Upload Report -->
     <el-card shadow="hover" class="mb-16">
       <template #header>
         <div class="card-header">
@@ -8,22 +7,42 @@
           <span>上传质检报告</span>
         </div>
       </template>
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="110px">
         <el-row :gutter="20">
           <el-col :span="8">
-            <el-form-item label="关联类型" prop="targetType">
-              <el-select v-model="form.targetType" placeholder="请选择" style="width: 100%">
-                <el-option label="产品 SN" value="SN" />
-                <el-option label="组装批次" value="BATCH" />
+            <el-form-item label="关联方式" prop="targetType">
+              <el-select v-model="form.targetType" placeholder="请选择" style="width: 100%" @change="onTargetTypeChange">
+                <el-option label="单台整机（SN）" value="SN" />
+                <el-option label="按组装批次（整批）" value="BATCH" />
+                <el-option label="多个 SN（批量）" value="MULTI_SN" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
-            <el-form-item label="关联标识" prop="targetId">
-              <el-input v-model="form.targetId" :placeholder="form.targetType === 'SN' ? '请输入 SN' : '请输入批次号'" />
+          <el-col v-if="form.targetType === 'SN'" :span="10">
+            <el-form-item label="整机 SN" prop="snSingle">
+              <el-input v-model="form.snSingle" placeholder="请输入整机 SN" clearable />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col v-else-if="form.targetType === 'BATCH'" :span="10">
+            <el-form-item label="组装批次" prop="batchNo">
+              <el-select
+                v-model="form.batchNo"
+                placeholder="选择批次（该批下全部整机共用本报告）"
+                filterable
+                clearable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="b in batchList"
+                  :key="b.batchNo"
+                  :label="`${b.batchNo}（${b.productModel || '—'}）`"
+                  :value="b.batchNo"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col v-else :span="10" />
+          <el-col :span="6">
             <el-form-item label="检测结果" prop="result">
               <el-select v-model="form.result" placeholder="请选择" style="width: 100%">
                 <el-option label="通过 (PASS)" value="PASS" />
@@ -32,9 +51,21 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row v-if="form.targetType === 'MULTI_SN'" :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="整机 SN 列表" prop="snBulk">
+              <el-input
+                v-model="form.snBulk"
+                type="textarea"
+                :rows="5"
+                placeholder="每行一个 SN，或用英文逗号、分号、空格分隔；将使用同一份报告文件批量更新这些整机"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-row :gutter="20">
           <el-col :span="16">
-            <el-form-item label="报告文件" prop="file">
+            <el-form-item label="报告文件">
               <el-upload
                 ref="uploadRef"
                 :auto-upload="false"
@@ -56,10 +87,17 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-alert
+          v-if="form.targetType === 'BATCH' && form.batchNo"
+          type="info"
+          :closable="false"
+          show-icon
+          class="hint-alert"
+          :title="batchHint"
+        />
       </el-form>
     </el-card>
 
-    <!-- Report List -->
     <el-card shadow="hover">
       <template #header>
         <div class="card-header">
@@ -96,23 +134,102 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Document, List } from '@element-plus/icons-vue'
-import { uploadAssemblyReport, getAssemblyReportList } from '@/api/assembler'
+import {
+  uploadAssemblyReport,
+  getAssemblyReportList,
+  getAssemblyBatchList,
+  getAssemblyRecordList
+} from '@/api/assembler'
 
 const formRef = ref()
 const uploadRef = ref()
-const form = reactive({ targetType: 'SN', targetId: '', result: '', file: null })
-const rules = {
-  targetType: [{ required: true, message: '请选择关联类型', trigger: 'change' }],
-  targetId: [{ required: true, message: '请输入关联标识', trigger: 'blur' }],
-  result: [{ required: true, message: '请选择检测结果', trigger: 'change' }]
+const form = reactive({
+  targetType: 'SN',
+  snSingle: '',
+  batchNo: '',
+  snBulk: '',
+  result: '',
+  file: null
+})
+
+const rules = computed(() => {
+  const base = {
+    targetType: [{ required: true, message: '请选择关联方式', trigger: 'change' }],
+    result: [{ required: true, message: '请选择检测结果', trigger: 'change' }]
+  }
+  if (form.targetType === 'SN') {
+    base.snSingle = [{ required: true, message: '请输入整机 SN', trigger: 'blur' }]
+  } else if (form.targetType === 'BATCH') {
+    base.batchNo = [{ required: true, message: '请选择组装批次', trigger: 'change' }]
+  } else {
+    base.snBulk = [{ required: true, message: '请填写至少一个 SN', trigger: 'blur' }]
+  }
+  return base
+})
+
+const batchList = ref([])
+const batchRecordCount = ref({})
+
+const batchHint = computed(() => {
+  const n = batchRecordCount.value[form.batchNo]
+  if (n != null && n >= 0) {
+    return `将使用同一份报告文件，更新该批次下全部整机（当前约 ${n} 条组装记录）。`
+  }
+  return '将使用同一份报告文件，更新该批次下全部组装记录。'
+})
+
+async function loadBatches() {
+  try {
+    const res = await getAssemblyBatchList({ pageNum: 1, pageSize: 500 })
+    batchList.value = res.data?.records || res.data?.list || []
+  } catch {
+    batchList.value = []
+  }
 }
+
+async function refreshBatchRecordCount(batchNo) {
+  if (!batchNo) return
+  try {
+    const r2 = await getAssemblyRecordList({ pageNum: 1, pageSize: 1, assemblyBatchNo: batchNo })
+    const t2 = r2.data?.total
+    if (typeof t2 === 'number') {
+      batchRecordCount.value = { ...batchRecordCount.value, [batchNo]: t2 }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+watch(
+  () => form.batchNo,
+  (bn) => {
+    if (form.targetType === 'BATCH' && bn) {
+      refreshBatchRecordCount(bn)
+    }
+  }
+)
+
+function onTargetTypeChange() {
+  formRef.value?.clearValidate()
+}
+
 const submitting = ref(false)
 
 function handleFileChange(file) {
   form.file = file.raw
+}
+
+function buildTargetId() {
+  if (form.targetType === 'SN') {
+    return (form.snSingle || '').trim()
+  }
+  if (form.targetType === 'BATCH') {
+    return (form.batchNo || '').trim()
+  }
+  return (form.snBulk || '').trim()
 }
 
 async function handleSubmit() {
@@ -122,21 +239,32 @@ async function handleSubmit() {
     ElMessage.warning('请选择报告文件')
     return
   }
+  const mode = form.targetType
   submitting.value = true
   try {
     const fd = new FormData()
-    fd.append('targetType', form.targetType)
-    fd.append('targetId', form.targetId)
+    fd.append('targetType', mode)
+    fd.append('targetId', buildTargetId())
     fd.append('result', form.result)
     fd.append('file', form.file)
-    await uploadAssemblyReport(fd)
-    ElMessage.success('报告上传成功')
-    formRef.value.resetFields()
+    const res = await uploadAssemblyReport(fd)
+    ElMessage.success(res.message || '报告上传成功')
+    if (mode === 'MULTI_SN' && res.data?.failed?.length) {
+      ElMessage.warning(res.data.failed.join('；'))
+    }
+    Object.assign(form, {
+      targetType: 'SN',
+      snSingle: '',
+      batchNo: '',
+      snBulk: '',
+      result: '',
+      file: null
+    })
+    formRef.value?.clearValidate()
     uploadRef.value?.clearFiles()
-    form.file = null
     loadList()
-  } catch (e) {
-    ElMessage.error(e.message || '上传失败')
+  } catch {
+    /* 拦截器已提示 */
   } finally {
     submitting.value = false
   }
@@ -152,14 +280,17 @@ async function loadList() {
     const res = await getAssemblyReportList({ page: page.page, size: page.size })
     reportList.value = res.data?.records || res.data?.list || []
     page.total = res.data?.total || 0
-  } catch (e) {
+  } catch {
     ElMessage.error('加载报告列表失败')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(loadList)
+onMounted(() => {
+  loadBatches()
+  loadList()
+})
 </script>
 
 <style scoped lang="scss">
@@ -177,5 +308,8 @@ onMounted(loadList)
   align-items: center;
   gap: 8px;
   font-weight: 600;
+}
+.hint-alert {
+  margin-top: 8px;
 }
 </style>

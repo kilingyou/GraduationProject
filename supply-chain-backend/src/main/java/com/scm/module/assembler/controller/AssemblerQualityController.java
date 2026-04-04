@@ -6,17 +6,22 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
 import com.scm.integration.evidence.EvidenceStorageService;
+import com.scm.module.assembler.dto.AssemblyQcBatchOutcome;
 import com.scm.module.assembler.entity.AssemblyRecord;
 import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/assembler/quality")
@@ -52,9 +57,13 @@ public class AssemblerQualityController {
             return Result.ok(record);
         }
         if ("BATCH".equalsIgnoreCase(targetType)) {
+            if (!StringUtils.hasText(targetId)) {
+                return Result.fail("请输入批次号");
+            }
+            String batchNo = targetId.trim();
             List<AssemblyRecord> records = assemblyRecordService.list(
                     new LambdaQueryWrapper<AssemblyRecord>()
-                            .eq(AssemblyRecord::getAssemblyBatchNo, targetId)
+                            .eq(AssemblyRecord::getAssemblyBatchNo, batchNo)
                             .eq(AssemblyRecord::getAssemblerId, loginUser.getUserId()));
             if (records.isEmpty()) {
                 return Result.fail("批次下无组装记录或无权操作");
@@ -63,9 +72,67 @@ public class AssemblerQualityController {
                 applyReport(r, ev, result);
             }
             assemblyRecordService.updateBatchById(records);
-            return Result.ok(records.get(0));
+            AssemblyQcBatchOutcome out = new AssemblyQcBatchOutcome().setUpdated(records.size());
+            return Result.ok("已对该批次 " + records.size() + " 台整机写入同一质检结果", out);
+        }
+        if ("MULTI_SN".equalsIgnoreCase(targetType)) {
+            AssemblyQcBatchOutcome outcome = applyReportToSnList(loginUser.getUserId(), targetId, ev, result);
+            if (outcome.getUpdated() == 0) {
+                return Result.fail(outcome.getFailed().isEmpty()
+                        ? "未解析到有效 SN"
+                        : String.join("；", outcome.getFailed()));
+            }
+            String msg = "已更新 " + outcome.getUpdated() + " 台整机"
+                    + (outcome.getFailed().isEmpty() ? "" : "，部分失败见返回详情");
+            return Result.ok(msg, outcome);
         }
         return Result.fail("不支持的 targetType: " + targetType);
+    }
+
+    private AssemblyQcBatchOutcome applyReportToSnList(Long assemblerId, String rawSnList,
+                                                        EvidenceStorageService.StoredEvidence ev, String result) {
+        AssemblyQcBatchOutcome outcome = new AssemblyQcBatchOutcome();
+        Set<String> sns = parseSnTokens(rawSnList);
+        if (sns.isEmpty()) {
+            return outcome;
+        }
+        List<AssemblyRecord> toUpdate = new ArrayList<>();
+        for (String sn : sns) {
+            AssemblyRecord record = assemblyRecordService.listBySn(sn);
+            if (record == null) {
+                outcome.getFailed().add(sn + ": 未找到组装记录");
+                continue;
+            }
+            if (!assemblerId.equals(record.getAssemblerId())) {
+                outcome.getFailed().add(sn + ": 无权操作");
+                continue;
+            }
+            applyReport(record, ev, result);
+            toUpdate.add(record);
+        }
+        if (!toUpdate.isEmpty()) {
+            assemblyRecordService.updateBatchById(toUpdate);
+            outcome.setUpdated(toUpdate.size());
+        }
+        return outcome;
+    }
+
+    private static Set<String> parseSnTokens(String raw) {
+        Set<String> out = new LinkedHashSet<>();
+        if (!StringUtils.hasText(raw)) {
+            return out;
+        }
+        for (String line : raw.split("\\R")) {
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+            for (String part : line.split("[,;，；、\\s]+")) {
+                if (StringUtils.hasText(part)) {
+                    out.add(part.trim());
+                }
+            }
+        }
+        return out;
     }
 
     private static void applyReport(AssemblyRecord r, EvidenceStorageService.StoredEvidence ev, String result) {
