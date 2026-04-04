@@ -95,6 +95,23 @@
                 </template>
               </el-sub-menu>
 
+              <el-sub-menu
+                v-else-if="route.children && route.children.length === 1 && route.children[0].children && route.children[0].children.length > 0"
+                :index="joinPath(route.path, route.children[0].path)"
+              >
+                <template #title>
+                  <el-icon><component :is="route.children[0].meta?.icon || route.meta?.icon" /></el-icon>
+                  <span>{{ route.children[0].meta?.title || route.meta?.title }}</span>
+                </template>
+                <el-menu-item
+                  v-for="sub in route.children[0].children"
+                  :key="sub.path"
+                  :index="joinPath(joinPath(route.path, route.children[0].path), sub.path)"
+                >
+                  <el-icon><component :is="sub.meta?.icon" /></el-icon>
+                  <span>{{ sub.meta?.title }}</span>
+                </el-menu-item>
+              </el-sub-menu>
               <el-menu-item
                 v-else-if="route.children && route.children.length === 1"
                 :index="joinPath(route.path, route.children[0].path)"
@@ -206,10 +223,44 @@ const showSupplierPendingAlert = computed(() =>
 )
 
 const useApiMenus = computed(() => Array.isArray(userStore.menus) && userStore.menus.length > 0)
+
+/** 无 component 的 M 型壳目录：子项与首页平级（各业务角色/监管等）；带子菜单的 M（如渠道流通）整体上移后结构不变 */
+const FLATTEN_SHELL_MENU_PATHS = [
+  '/assembler',
+  '/supplier',
+  '/manufacturer',
+  '/distributor',
+  '/enduser',
+  '/regulator'
+]
+
+function isShellDirectoryMenu(m) {
+  if (!m || !FLATTEN_SHELL_MENU_PATHS.includes(m.path)) return false
+  return (
+    m.menuType === 'M' &&
+    (!m.component || String(m.component).trim() === '') &&
+    Array.isArray(m.children) &&
+    m.children.length > 0
+  )
+}
+
+function flattenShellDirectoryMenus(menus) {
+  if (!Array.isArray(menus)) return menus
+  const out = []
+  for (const m of menus) {
+    if (isShellDirectoryMenu(m)) {
+      out.push(...m.children)
+    } else {
+      out.push(m)
+    }
+  }
+  return out
+}
+
 const visibleApiMenus = computed(() => {
   const menus = Array.isArray(userStore.menus) ? userStore.menus : []
-  if (roleKey.value === 'admin') return menus
-  return menus.filter(top => top?.path !== '/system')
+  const base = roleKey.value === 'admin' ? menus : menus.filter(top => top?.path !== '/system')
+  return flattenShellDirectoryMenus(base)
 })
 
 function joinPath(base, child) {
@@ -225,12 +276,30 @@ function joinPath(base, child) {
 
 const menuRoutes = computed(() => {
   const role = roleKey.value
-  return constantRoutes.filter(r => {
+  const filtered = constantRoutes.filter(r => {
     if (r.path === '/login' || r.path === '/register' || r.path === '/trace') return false
     if (!r.children) return false
     const allowed = r.meta?.roles
     if (!allowed) return true
     return role === 'admin' || allowed.includes(role)
+  })
+  return filtered.flatMap(r => {
+    if (
+      (r.path === '/assembler' ||
+        r.path === '/supplier' ||
+        r.path === '/manufacturer' ||
+        r.path === '/distributor' ||
+        r.path === '/enduser' ||
+        r.path === '/regulator') &&
+      r.children?.length
+    ) {
+      return r.children.map(ch => ({
+        path: r.path,
+        meta: {},
+        children: [ch]
+      }))
+    }
+    return [r]
   })
 })
 

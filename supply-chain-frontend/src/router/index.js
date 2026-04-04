@@ -50,7 +50,7 @@ export const constantRoutes = [
   {
     path: '/supplier',
     component: Layout,
-    meta: { title: '供应商管理', icon: 'Shop', roles: ['admin', 'supplier'] },
+    meta: { roles: ['admin', 'supplier'] },
     children: [
       { path: 'design', name: 'DesignDoc', component: () => import('@/views/supplier/design/index.vue'), meta: { title: '设计文档', icon: 'Document' } },
       { path: 'bom', name: 'BomMgmt', component: () => import('@/views/supplier/bom/index.vue'), meta: { title: 'BOM管理', icon: 'List' } },
@@ -62,7 +62,7 @@ export const constantRoutes = [
   {
     path: '/manufacturer',
     component: Layout,
-    meta: { title: '制造商管理', icon: 'OfficeBuilding', roles: ['admin', 'manufacturer'] },
+    meta: { roles: ['admin', 'manufacturer'] },
     children: [
       { path: 'order', name: 'MfgOrder', component: () => import('@/views/manufacturer/order/index.vue'), meta: { title: '订单接收', icon: 'Tickets' } },
       { path: 'production', name: 'Production', component: () => import('@/views/manufacturer/production/index.vue'), meta: { title: '生产管理', icon: 'Cpu' } },
@@ -73,7 +73,7 @@ export const constantRoutes = [
   {
     path: '/assembler',
     component: Layout,
-    meta: { title: '组装商管理', icon: 'SetUp', roles: ['admin', 'assembler'] },
+    meta: { roles: ['admin', 'assembler'] },
     children: [
       { path: 'intake', name: 'CompIntake', component: () => import('@/views/assembler/intake/index.vue'), meta: { title: '部件入库', icon: 'Box' } },
       { path: 'assembly', name: 'Assembly', component: () => import('@/views/assembler/assembly/index.vue'), meta: { title: '组装管理', icon: 'Connection' } },
@@ -111,7 +111,7 @@ export const constantRoutes = [
   {
     path: '/distributor',
     component: Layout,
-    meta: { title: '分销管理', icon: 'Van', roles: ['admin', 'distributor'] },
+    meta: { roles: ['admin', 'distributor'] },
     children: [
       { path: 'logistics', name: 'Logistics', component: () => import('@/views/distributor/logistics/index.vue'), meta: { title: '物流流转', icon: 'Ship' } },
       { path: 'inventory', name: 'Inventory', component: () => import('@/views/distributor/inventory/index.vue'), meta: { title: '库存管理', icon: 'GoodsFilled' } },
@@ -121,7 +121,7 @@ export const constantRoutes = [
   {
     path: '/enduser',
     component: Layout,
-    meta: { title: '终端用户', icon: 'UserFilled', roles: ['admin', 'enduser'] },
+    meta: { roles: ['admin', 'enduser'] },
     children: [
       { path: 'trace', name: 'EnduserTrace', component: () => import('@/views/enduser/trace/index.vue'), meta: { title: '溯源查询', icon: 'Search' } },
       { path: 'bind', name: 'ProductBind', component: () => import('@/views/enduser/bind/index.vue'), meta: { title: '产品绑定', icon: 'Link' } },
@@ -132,7 +132,7 @@ export const constantRoutes = [
   {
     path: '/regulator',
     component: Layout,
-    meta: { title: '监管控制台', icon: 'Monitor', roles: ['admin', 'regulator'] },
+    meta: { roles: ['admin', 'regulator'] },
     children: [
       { path: 'audit', name: 'SupplierAudit', component: () => import('@/views/regulator/audit/index.vue'), meta: { title: '资质审核', icon: 'Stamp' } },
       { path: 'inspection', name: 'Inspection', component: () => import('@/views/regulator/inspection/index.vue'), meta: { title: '抽检任务', icon: 'FirstAidKit' } },
