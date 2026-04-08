@@ -7,6 +7,7 @@ import com.scm.common.PageResult;
 import com.scm.common.Result;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.integration.ipfs.IpfsStorageService;
 import com.scm.module.manufacturer.dto.ManufacturerOrderVO;
@@ -45,6 +46,7 @@ public class ManufacturerOrderController {
     private final ManufacturerOrderViewService manufacturerOrderViewService;
     private final EvidenceStorageService evidenceStorageService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final IpfsStorageService ipfsStorageService;
     private final DesignDocumentService designDocumentService;
     private final BomService bomService;
@@ -115,6 +117,7 @@ public class ManufacturerOrderController {
         }
         String payload = orderId + "|" + user.getUserId() + "|" + finalPrice + "|" + deliveryDate + "|" + fileHashPart;
         agreement.setTxHash(blockchainAnchorService.anchor("MANUFACTURING_AGREEMENT", HashUtil.sha256Hex(payload)));
+        smartContractInvokeService.signManufacturingAgreement(orderId, agreement.getAgreementHash(), finalPrice.toPlainString(), deliveryDate);
 
         if (StringUtils.hasText(user.getBlockchainAddr())) {
             agreement.setManufacturerSign("MANUFACTURER_ADDR:" + user.getBlockchainAddr());

@@ -9,6 +9,7 @@ import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.supplier.entity.Bom;
 import com.scm.module.supplier.entity.DesignDocument;
 import com.scm.module.supplier.entity.ProductionRequest;
@@ -33,6 +34,7 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         implements ProductionRequestService {
 
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
     private final BomService bomService;
     private final DesignDocumentService designDocumentService;
@@ -70,6 +72,15 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
 
         String anchorPayload = request.getOrderId() + "|" + request.getSupplierId();
         request.setTxHash(blockchainAnchorService.anchor("PRODUCTION_ORDER", HashUtil.sha256Hex(anchorPayload)));
+        smartContractInvokeService.createProductionRequest(
+                request.getOrderId(),
+                request.getTargetManufacturer(),
+                bom.getFileHash(),
+                request.getQuantity(),
+                request.getDesignDocHash(),
+                request.getExpectedDelivery(),
+                request.getQualityRequirement()
+        );
         updateById(request);
 
         log.info("Production order created: id={}, orderId={}", request.getId(), request.getOrderId());

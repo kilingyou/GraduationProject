@@ -9,6 +9,7 @@ import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.ManufacturingAgreement;
 import com.scm.module.manufacturer.entity.ProductionBatch;
@@ -43,6 +44,7 @@ public class ProductionBatchServiceImpl
     private final DeviceRecordMapper deviceRecordMapper;
     private final RejectRecordService rejectRecordService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -281,6 +283,13 @@ public class ProductionBatchServiceImpl
                     .set(ProductionRequest::getStatus, Constants.COMPLETED));
             blockchainAnchorService.anchor("PRODUCTION_ORDER_COMPLETE",
                     HashUtil.sha256Hex(batch.getOrderId() + "|" + manufacturerId));
+            smartContractInvokeService.recordProductionComplete(
+                    batch.getOrderId(),
+                    batch.getBatchId(),
+                    true,
+                    "",
+                    "AUTO_COMPLETE"
+            );
         }
     }
 }

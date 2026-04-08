@@ -9,6 +9,7 @@ import com.scm.module.assembler.entity.AssemblyRecord;
 import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.enduser.entity.Decommission;
 import com.scm.module.enduser.mapper.DecommissionMapper;
 import com.scm.module.enduser.service.DecommissionService;
@@ -23,6 +24,7 @@ public class DecommissionServiceImpl
         implements DecommissionService {
 
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final AssemblyRecordService assemblyRecordService;
 
     @Override
@@ -56,6 +58,11 @@ public class DecommissionServiceImpl
                     "DECOMMISSION",
                     HashUtil.sha256Hex(payload)
             ));
+            smartContractInvokeService.decommissionWithAgency(
+                    decommission.getSn(),
+                    decommission.getDisposalMethod(),
+                    decommission.getRecyclerName()
+            );
         }
 
         save(decommission);

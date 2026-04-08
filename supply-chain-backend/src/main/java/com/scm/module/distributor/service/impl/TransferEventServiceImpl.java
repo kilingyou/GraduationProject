@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.assembler.entity.AssemblyRecord;
 import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.module.distributor.entity.TransferEvent;
@@ -30,6 +31,7 @@ public class TransferEventServiceImpl
 
     private final AssemblyRecordService assemblyRecordService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -83,6 +85,12 @@ public class TransferEventServiceImpl
 
         String payload = snNorm + "|" + te.getTrackingNumber() + "|" + senderId + "|" + receiverId + "|" + st;
         te.setTxHash(blockchainAnchorService.anchor("TRANSFER_EVENT", HashUtil.sha256Hex(payload)));
+        smartContractInvokeService.logTransfer(
+                snNorm,
+                te.getTrackingNumber(),
+                receiverId,
+                te.getTransferType()
+        );
 
         save(te);
 

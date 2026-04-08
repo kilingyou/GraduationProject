@@ -145,6 +145,30 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
         return newKeyPair.getAddress();
     }
 
+    @Override
+    public BlockchainAccount generateBlockchainAccount() {
+        if (!available) {
+            return BlockchainAnchorService.super.generateBlockchainAccount();
+        }
+        CryptoKeyPair newKeyPair = client.getCryptoSuite().createKeyPair();
+        return new BlockchainAccount(newKeyPair.getAddress(), newKeyPair.getHexPrivateKey());
+    }
+
+    public String sendTransactionByPrivateKey(String privateKeyHex, String functionName, List<Object> params) throws Exception {
+        if (!available || contractAddress == null || contractAddress.trim().isEmpty()) {
+            throw new IllegalStateException("FISCO BCOS not available or contract address not set");
+        }
+        if (privateKeyHex == null || privateKeyHex.trim().isEmpty()) {
+            throw new IllegalArgumentException("privateKeyHex is empty");
+        }
+        CryptoKeyPair keyPair = client.getCryptoSuite().createKeyPair(privateKeyHex.trim());
+        AssembleTransactionProcessor processor = TransactionProcessorFactory.createAssembleTransactionProcessor(
+                client, keyPair, abiPath, binPath);
+        TransactionResponse resp = processor.sendTransactionAndGetResponseByContractLoader(
+                CONTRACT_NAME, contractAddress, functionName, params);
+        return resp.getTransactionReceipt().getTransactionHash();
+    }
+
     public boolean isAvailable() {
         return available;
     }

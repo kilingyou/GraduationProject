@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.assembler.entity.AssemblyRecord;
 import com.scm.module.assembler.service.AssemblyRecordService;
@@ -30,6 +31,7 @@ public class SalesRecordServiceImpl
 
     private final EvidenceStorageService evidenceStorageService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final AssemblyRecordService assemblyRecordService;
 
     @Override
@@ -93,6 +95,7 @@ public class SalesRecordServiceImpl
 
         String anchorBase = sale.getSn() + "|" + sale.getSaleTime() + "|" + sale.getCustomerHash() + "|" + invoiceHashPart;
         sale.setTxHash(blockchainAnchorService.anchor("SALE_REGISTER", HashUtil.sha256Hex(anchorBase)));
+        smartContractInvokeService.registerSale(sale.getSn(), sale.getCustomerHash(), sale.getInvoiceHash());
 
         save(sale);
 

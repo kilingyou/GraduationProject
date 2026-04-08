@@ -23,6 +23,7 @@ com\scm\module\assembler\entity\AssemblyRecord.class
 com\scm\common\Constants.class
 com\scm\module\system\service\impl\SysRoleServiceImpl.class
 com\scm\module\distributor\dto\SnImportRow.class
+com\scm\integration\blockchain\SmartContractInvokeService.class
 com\scm\module\supplier\service\impl\ProductionRequestViewServiceImpl.class
 com\scm\module\supplier\dto\ProductionOrderTrackVO$ReportRow.class
 com\scm\module\assembler\controller\AssemblerQualityController.class
@@ -178,6 +179,7 @@ com\scm\config\CorsConfig.class
 com\scm\module\manufacturer\mapper\QualityReportMapper.class
 com\scm\module\assembler\controller\AssemblerDashboardController.class
 com\scm\module\regulator\mapper\RecallNoticeMapper.class
+com\scm\integration\blockchain\BlockchainAnchorService$BlockchainAccount.class
 com\scm\integration\blockchain\BlockchainAnchorService.class
 com\scm\module\system\service\SysRoleService.class
 com\scm\module\regulator\controller\RecallController$2.class

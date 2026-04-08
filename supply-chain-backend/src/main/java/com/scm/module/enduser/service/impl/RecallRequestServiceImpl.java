@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.enduser.entity.RecallRequest;
 import com.scm.module.enduser.mapper.RecallRequestMapper;
@@ -34,6 +35,7 @@ public class RecallRequestServiceImpl
 
     private final EvidenceStorageService evidenceStorageService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -89,6 +91,7 @@ public class RecallRequestServiceImpl
                 "RECALL_REQUEST",
                 HashUtil.sha256Hex(payload)
         ));
+        smartContractInvokeService.requestRecall(request.getSn(), request.getFaultType(), request.getFaultDesc());
 
         save(request);
         return request;

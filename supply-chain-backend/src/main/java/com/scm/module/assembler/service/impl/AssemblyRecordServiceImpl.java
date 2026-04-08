@@ -11,6 +11,7 @@ import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.assembler.dto.AssemblyRecordCreateRequest;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
 import com.scm.module.assembler.entity.AssemblyBatch;
@@ -44,6 +45,7 @@ public class AssemblyRecordServiceImpl
     private static final Random RANDOM = new Random();
 
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final AssemblyBatchService assemblyBatchService;
     private final AssemblerIntakeService assemblerIntakeService;
     private final DeviceRecordService deviceRecordService;
@@ -134,6 +136,16 @@ public class AssemblyRecordServiceImpl
                 .setAssemblyTime(LocalDateTime.now());
         String anchorPayload = sn + "|" + ecidJson + "|" + assemblerId;
         record.setAssemblyTxHash(blockchainAnchorService.anchor("ASSEMBLY_CREATE", HashUtil.sha256Hex(anchorPayload)));
+        smartContractInvokeService.createAssemblyRecord(
+                sn,
+                ecidJson,
+                batch.getBatchNo(),
+                record.getFirmwareVersion(),
+                record.getTestReportHash()
+        );
+        for (String ecid : ecids) {
+            smartContractInvokeService.bindEcidToSn(ecid, sn);
+        }
         save(record);
 
         deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()

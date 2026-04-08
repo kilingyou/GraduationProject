@@ -73,4 +73,5 @@ public class SysUserController {
         sysUserService.updateById(update);
         return Result.ok();
     }
+
 }

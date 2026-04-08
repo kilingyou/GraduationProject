@@ -8,6 +8,7 @@ import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.manufacturer.dto.DeviceRegisterRequest;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.ProductionBatch;
@@ -38,6 +39,7 @@ public class DeviceRecordServiceImpl
 
     private final ProductionBatchService productionBatchService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
 
     @Override
     public List<String> generateEcids(String batchId, String orderId, Long manufacturerId, Integer qty, String deviceType) {
@@ -133,6 +135,14 @@ public class DeviceRecordServiceImpl
                     + record.getBatchId() + "|" + record.getManufacturerId();
             String txHash = blockchainAnchorService.anchor(
                     "DEVICE_REGISTER", HashUtil.sha256Hex(payload));
+            smartContractInvokeService.registerDeviceRecord(
+                    record.getEcid(),
+                    record.getOrderId(),
+                    record.getBatchId(),
+                    record.getDeviceType(),
+                    record.getTestReportHash(),
+                    Constants.QC_PASS
+            );
             record.setChainRegistered(1);
             record.setTxHash(txHash);
             if (!Constants.QC_PASS.equals(record.getStatus())) {

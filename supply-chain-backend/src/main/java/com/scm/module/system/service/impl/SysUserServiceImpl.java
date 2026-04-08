@@ -22,6 +22,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
@@ -54,7 +56,12 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setStatus(1);
         user.setDelFlag(0);
-        user.setBlockchainAddr(blockchainAnchorService.generateBlockchainAddress());
+        BlockchainAnchorService.BlockchainAccount account = blockchainAnchorService.generateBlockchainAccount();
+        user.setBlockchainAddr(account.getAddress());
+        // Existing column is named privateKeyEnc; use Base64 to avoid plain-text storage.
+        if (StringUtils.hasText(account.getPrivateKeyHex())) {
+            user.setPrivateKeyEnc(Base64.getEncoder().encodeToString(account.getPrivateKeyHex().getBytes(StandardCharsets.UTF_8)));
+        }
         baseMapper.insert(user);
 
         if ("supplier".equalsIgnoreCase(roleKey)) {
