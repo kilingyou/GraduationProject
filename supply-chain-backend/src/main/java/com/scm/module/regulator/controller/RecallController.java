@@ -11,6 +11,7 @@ import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
+import com.scm.integration.blockchain.TxReceiptEvidenceService;
 import com.scm.module.distributor.entity.SalesRecord;
 import com.scm.module.distributor.service.SalesRecordService;
 import com.scm.module.enduser.service.TraceService;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,6 +50,7 @@ public class RecallController {
     private final DeviceRecordService deviceRecordService;
     private final ObjectMapper objectMapper;
     private final TraceService traceService;
+    private final TxReceiptEvidenceService txReceiptEvidenceService;
     private final AutoRecallScheduler autoRecallScheduler;
     private final SalesRecordService salesRecordService;
     private final SupplyAnomalyService supplyAnomalyService;
@@ -115,11 +118,17 @@ public class RecallController {
     @GetMapping("/evidence/{sn}")
     public Result<Map<String, Object>> exportEvidence(@PathVariable String sn) {
         Map<String, Object> trace = traceService.traceProduct(sn);
+        List<String> txHashes = collectTraceTxHashes(trace);
+        List<Map<String, Object>> txChecks = new ArrayList<>();
+        for (String tx : txHashes) {
+            txChecks.add(txReceiptEvidenceService.checkTx(tx));
+        }
         Map<String, Object> pack = new HashMap<>();
         pack.put("sn", sn);
         pack.put("generatedAt", java.time.LocalDateTime.now());
         pack.put("trace", trace);
-        pack.put("note", "JSON evidence package; can be further rendered to PDF by offline tools.");
+        pack.put("txChecks", txChecks);
+        pack.put("note", "JSON evidence package with on-chain tx receipt checks.");
         return Result.ok(pack);
     }
 
@@ -129,7 +138,12 @@ public class RecallController {
     @GetMapping("/evidence/{sn}/pdf")
     public ResponseEntity<byte[]> exportEvidencePdf(@PathVariable String sn) {
         Map<String, Object> trace = traceService.traceProduct(sn);
-        byte[] pdf = renderEvidencePdf(sn, trace);
+        List<String> txHashes = collectTraceTxHashes(trace);
+        List<Map<String, Object>> txChecks = new ArrayList<>();
+        for (String tx : txHashes) {
+            txChecks.add(txReceiptEvidenceService.checkTx(tx));
+        }
+        byte[] pdf = renderEvidencePdf(sn, trace, txChecks);
         String fileName = "evidence-" + sn + ".pdf";
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
@@ -216,7 +230,7 @@ public class RecallController {
     }
 
     @SuppressWarnings("unchecked")
-    private byte[] renderEvidencePdf(String sn, Map<String, Object> trace) {
+    private byte[] renderEvidencePdf(String sn, Map<String, Object> trace, List<Map<String, Object>> txChecks) {
         try {
             BaseFont bfChinese = BaseFont.createFont("STSong-Light", "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
             Font titleFont = new Font(bfChinese, 18, Font.BOLD);
@@ -317,6 +331,23 @@ public class RecallController {
                 doc.add(new Paragraph(" "));
             }
 
+            if (txChecks != null && !txChecks.isEmpty()) {
+                doc.add(new Paragraph("链上交易回执校验", h2Font));
+                PdfPTable txTable = newTable(5, new float[]{30, 12, 12, 16, 30});
+                addHeaderRow(txTable, new String[]{"TxHash", "Found", "StatusOK", "区块号", "消息"}, boldFont);
+                for (Map<String, Object> c : txChecks) {
+                    addRow(txTable, new String[]{
+                            str(c.get("txHash")),
+                            str(c.get("found")),
+                            str(c.get("statusOk")),
+                            str(c.get("blockNumber")),
+                            str(c.get("message"))
+                    }, bodyFont);
+                }
+                doc.add(txTable);
+                doc.add(new Paragraph(" "));
+            }
+
             Paragraph footer = new Paragraph("本证据包由供应链管理系统自动生成，数据来源于区块链及IPFS存储。", smallFont);
             footer.setAlignment(Element.ALIGN_CENTER);
             doc.add(footer);
@@ -366,5 +397,53 @@ public class RecallController {
 
     private String str(Object o) {
         return o != null ? String.valueOf(o) : "-";
+    }
+
+    private List<String> collectTraceTxHashes(Map<String, Object> trace) {
+        LinkedHashSet<String> set = new LinkedHashSet<>();
+        collectTxHashesRecursive(trace, set);
+        return new ArrayList<>(set);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectTxHashesRecursive(Object node, LinkedHashSet<String> out) {
+        if (node == null) {
+            return;
+        }
+        if (node instanceof String) {
+            String s = ((String) node).trim();
+            if (s.matches("^0x[0-9a-fA-F]{64}$")) {
+                out.add(s);
+            }
+            return;
+        }
+        if (node instanceof Map) {
+            Map<Object, Object> m = (Map<Object, Object>) node;
+            for (Map.Entry<Object, Object> e : m.entrySet()) {
+                Object key = e.getKey();
+                Object value = e.getValue();
+                if (key != null && String.valueOf(key).toLowerCase().contains("txhash") && value instanceof String) {
+                    String tx = ((String) value).trim();
+                    if (tx.matches("^0x[0-9a-fA-F]{64}$")) {
+                        out.add(tx);
+                    }
+                }
+                collectTxHashesRecursive(value, out);
+            }
+            return;
+        }
+        if (node instanceof Collection) {
+            for (Object item : (Collection<?>) node) {
+                collectTxHashesRecursive(item, out);
+            }
+            return;
+        }
+        // For entity objects, convert to map and continue.
+        try {
+            Map<String, Object> converted = objectMapper.convertValue(
+                    node, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            collectTxHashesRecursive(converted, out);
+        } catch (Exception ignore) {
+        }
     }
 }

@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -74,11 +75,12 @@ class SmartContractInvokeServiceTest {
     }
 
     @Test
-    void shouldSkipWhenFiscoUnavailable() throws Exception {
+    void shouldThrowWhenFiscoUnavailable() throws Exception {
         when(provider.getIfAvailable()).thenReturn(fisco);
         when(fisco.isAvailable()).thenReturn(false);
 
-        service.registerSale("SN-1", "cHash", "iHash");
+        assertThrows(IllegalStateException.class, () ->
+                service.registerSale("SN-1", "cHash", "iHash"));
 
         verify(fisco, never()).sendTransactionByPrivateKey(anyString(), anyString(), anyList());
     }

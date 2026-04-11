@@ -60,6 +60,8 @@ public class AuthController {
         return Result.ok(data);
     }
 
+
+    //注册模块
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Result<Void> register(@RequestBody Map<String, Object> params) {
         SysUser user = new SysUser();
@@ -76,6 +78,7 @@ public class AuthController {
         return Result.ok();
     }
 
+    //带资质证书等多元注册，供应商注册时走这里
     @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<Void> registerMultipart(
             @RequestParam String username,
@@ -96,6 +99,7 @@ public class AuthController {
         user.setPhone(phone);
         user.setEmail(email);
 
+        //资质证书与营业执照列表，类型为文件
         List<MultipartFile> qualification = files == null ? Collections.<MultipartFile>emptyList()
                 : Arrays.stream(files).filter(f -> f != null && !f.isEmpty()).collect(Collectors.toList());
         if ("supplier".equalsIgnoreCase(roleKey)) {

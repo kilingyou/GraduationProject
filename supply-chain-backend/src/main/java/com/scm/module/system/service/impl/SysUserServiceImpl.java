@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.ContractRoleSyncService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.system.entity.SysRole;
 import com.scm.module.system.entity.SysSupplierAudit;
@@ -37,6 +38,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private final PasswordEncoder passwordEncoder;
     private final EvidenceStorageService evidenceStorageService;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final ContractRoleSyncService contractRoleSyncService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -53,12 +55,15 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             throw new BusinessException("用户名已存在");
         }
 
+        //加密账户密码
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        //1代表账户启用、0代表禁用。与管理员控制有关，和资质审核无关
         user.setStatus(1);
         user.setDelFlag(0);
+        //生成账户，包含随机生成账户地址与私钥
         BlockchainAnchorService.BlockchainAccount account = blockchainAnchorService.generateBlockchainAccount();
         user.setBlockchainAddr(account.getAddress());
-        // Existing column is named privateKeyEnc; use Base64 to avoid plain-text storage.
+        //对私钥加密并存入user中
         if (StringUtils.hasText(account.getPrivateKeyHex())) {
             user.setPrivateKeyEnc(Base64.getEncoder().encodeToString(account.getPrivateKeyHex().getBytes(StandardCharsets.UTF_8)));
         }
@@ -84,6 +89,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                     throw new BusinessException("资质文件读取失败");
                 }
                 String biz = i == 0 ? "SUPPLIER_LICENSE" : "SUPPLIER_CERT";
+                //包含文件哈希、CID、交易哈希。
                 EvidenceStorageService.StoredEvidence ev =
                         evidenceStorageService.store(bytes, f.getOriginalFilename(), biz);
                 if (i == 0) {
@@ -134,10 +140,81 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignRole(Long userId, String roleKey) {
+        if (userId == null) {
+            throw new BusinessException("用户ID不能为空");
+        }
+        if (!StringUtils.hasText(roleKey)) {
+            throw new BusinessException("角色不能为空");
+        }
+        SysUser user = baseMapper.selectById(userId);
+        if (user == null || user.getDelFlag() != null && user.getDelFlag() == 1) {
+            throw new BusinessException("用户不存在");
+        }
+        SysRole role = sysRoleMapper.selectOne(new LambdaQueryWrapper<SysRole>()
+                .eq(SysRole::getRoleKey, roleKey.trim().toLowerCase())
+                .eq(SysRole::getStatus, 1)
+                .last("LIMIT 1"));
+        if (role == null) {
+            throw new BusinessException("角色不存在或已禁用: " + roleKey);
+        }
+        baseMapper.deleteUserRoles(userId);
+        baseMapper.insertUserRole(userId, role.getId());
+        contractRoleSyncService.syncUserRoleToChain(userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SysUser initBlockchainAccountIfMissing(Long userId) {
+        if (userId == null) {
+            throw new BusinessException("用户ID不能为空");
+        }
+        SysUser user = baseMapper.selectById(userId);
+        if (user == null || user.getDelFlag() != null && user.getDelFlag() == 1) {
+            throw new BusinessException("用户不存在");
+        }
+        if (StringUtils.hasText(user.getBlockchainAddr()) && StringUtils.hasText(user.getPrivateKeyEnc())) {
+            return getUserInfo(userId);
+        }
+        BlockchainAnchorService.BlockchainAccount account = blockchainAnchorService.generateBlockchainAccount();
+        if (!StringUtils.hasText(account.getAddress()) || !StringUtils.hasText(account.getPrivateKeyHex())) {
+            throw new BusinessException("生成区块链账户失败");
+        }
+        SysUser update = new SysUser();
+        update.setId(userId);
+        update.setBlockchainAddr(account.getAddress());
+        update.setPrivateKeyEnc(Base64.getEncoder().encodeToString(
+                account.getPrivateKeyHex().getBytes(StandardCharsets.UTF_8)));
+        baseMapper.updateById(update);
+        return getUserInfo(userId);
+    }
+
+    @Override
     public IPage<SysUser> listUsers(Page<SysUser> page, String username, String roleKey) {
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(StringUtils.hasText(username), SysUser::getUsername, username);
         wrapper.eq(SysUser::getDelFlag, 0);
+        if (StringUtils.hasText(roleKey)) {
+            List<SysUser> users = baseMapper.listActiveUsersByRoleKey(roleKey.trim());
+            if (users == null || users.isEmpty()) {
+                page.setRecords(Collections.emptyList());
+                page.setTotal(0);
+                return page;
+            }
+            List<Long> ids = new java.util.ArrayList<>();
+            for (SysUser u : users) {
+                if (u.getId() != null) {
+                    ids.add(u.getId());
+                }
+            }
+            if (ids.isEmpty()) {
+                page.setRecords(Collections.emptyList());
+                page.setTotal(0);
+                return page;
+            }
+            wrapper.in(SysUser::getId, ids);
+        }
         wrapper.orderByDesc(SysUser::getCreateTime);
         IPage<SysUser> result = baseMapper.selectPage(page, wrapper);
         result.getRecords().forEach(u -> u.setPassword(null));

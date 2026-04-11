@@ -23,7 +23,7 @@ peers=["192.168.44.135:20200", "192.168.44.135:20201"]
 
 keyStoreDir = "conf/account"                # 账户文件目录
 accountFileFormat = "pem"                   # 账户格式 pem / p12
-# accountAddress = ""                       # 指定发交易账户地址（留空则自动生成）
+accountAddress = "0x2995ae2ee2e634f471e67e4a477fe6b9b1bb0e51"                       # 指定发交易账户地址（留空则自动生成）
 
 [threadPool]
 

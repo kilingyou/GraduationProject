@@ -41,7 +41,7 @@ public class SmartContractInvokeService {
         params.add(empty(designDocHash));
         params.add(expectedDelivery == null ? 0L : expectedDelivery.atStartOfDay().atZone(java.time.ZoneId.systemDefault()).toEpochSecond());
         params.add(empty(qualityReqHash));
-        sendBestEffort("createProductionRequest", params);
+        sendRequired("createProductionRequest", params);
     }
 
     public void signManufacturingAgreement(String orderId, String agreementHash, String priceClause, LocalDate deliveryDate) {
@@ -50,7 +50,7 @@ public class SmartContractInvokeService {
         params.add(empty(agreementHash));
         params.add(empty(priceClause));
         params.add(deliveryDate == null ? 0L : deliveryDate.atStartOfDay().atZone(java.time.ZoneId.systemDefault()).toEpochSecond());
-        sendBestEffort("signManufacturingAgreement", params);
+        sendRequired("signManufacturingAgreement", params);
     }
 
     public void registerDeviceRecord(String ecid, String orderId, String batchId, String devType, String testReportHash, String status) {
@@ -61,7 +61,7 @@ public class SmartContractInvokeService {
         params.add(empty(devType));
         params.add(empty(testReportHash));
         params.add(empty(status));
-        sendBestEffort("registerDeviceRecord", params);
+        sendRequired("registerDeviceRecord", params);
     }
 
     public void recordProductionComplete(String orderId, String batchId, boolean passed, String testReportHash, String signatureHash) {
@@ -71,7 +71,7 @@ public class SmartContractInvokeService {
         params.add(passed);
         params.add(empty(testReportHash));
         params.add(empty(signatureHash));
-        sendBestEffort("recordProductionComplete", params);
+        sendRequired("recordProductionComplete", params);
     }
 
     public void createAssemblyRecord(String sn, String ecidListJson, String batchNo, String fwVersion, String reportHash) {
@@ -81,14 +81,14 @@ public class SmartContractInvokeService {
         params.add(empty(batchNo));
         params.add(empty(fwVersion));
         params.add(empty(reportHash));
-        sendBestEffort("createAssemblyRecord", params);
+        sendRequired("createAssemblyRecord", params);
     }
 
     public void bindEcidToSn(String ecid, String sn) {
         List<Object> params = new ArrayList<>();
         params.add(empty(ecid));
         params.add(empty(sn));
-        sendBestEffort("bindEcidToSn", params);
+        sendRequired("bindEcidToSn", params);
     }
 
     public void logTransfer(String sn, String trackingNo, Long receiverId, String transferType) {
@@ -97,7 +97,7 @@ public class SmartContractInvokeService {
         params.add(empty(trackingNo));
         params.add(resolveAddressByUserId(receiverId));
         params.add(empty(transferType));
-        sendBestEffort("logTransfer", params);
+        sendRequired("logTransfer", params);
     }
 
     public void registerSale(String sn, String customerHash, String invoiceHash) {
@@ -105,7 +105,7 @@ public class SmartContractInvokeService {
         params.add(empty(sn));
         params.add(empty(customerHash));
         params.add(empty(invoiceHash));
-        sendBestEffort("registerSale", params);
+        sendRequired("registerSale", params);
     }
 
     public void requestRecall(String sn, String faultType, String faultDesc) {
@@ -113,7 +113,7 @@ public class SmartContractInvokeService {
         params.add(empty(sn));
         params.add(empty(faultType));
         params.add(empty(faultDesc));
-        sendBestEffort("requestRecall", params);
+        sendRequired("requestRecall", params);
     }
 
     public void decommissionWithAgency(String sn, String disposalMethod, String agency) {
@@ -121,25 +121,23 @@ public class SmartContractInvokeService {
         params.add(empty(sn));
         params.add(empty(disposalMethod));
         params.add(empty(agency));
-        sendBestEffort("decommissionWithAgency", params);
+        sendRequired("decommissionWithAgency", params);
     }
 
-    private void sendBestEffort(String functionName, List<Object> params) {
+    private void sendRequired(String functionName, List<Object> params) {
         FiscoBcosBlockchainAnchorService fisco = fiscoProvider.getIfAvailable();
         if (fisco == null || !fisco.isAvailable()) {
-            log.debug("Skip smart-contract call {} because FISCO bean unavailable", functionName);
-            return;
+            throw new IllegalStateException("FISCO unavailable for function: " + functionName);
         }
         String privateKeyHex = resolveCurrentUserPrivateKeyHex();
         if (!StringUtils.hasText(privateKeyHex)) {
-            log.warn("Skip smart-contract call {} because current user private key is missing", functionName);
-            return;
+            throw new IllegalStateException("Current user private key missing for function: " + functionName);
         }
         try {
             String txHash = fisco.sendTransactionByPrivateKey(privateKeyHex, functionName, params);
             log.info("Smart-contract call success: {} tx={}", functionName, txHash);
         } catch (Exception e) {
-            log.warn("Smart-contract call failed: {} params={} err={}", functionName, params, e.getMessage());
+            throw new RuntimeException("Smart-contract call failed: " + functionName + ", err=" + e.getMessage(), e);
         }
     }
 

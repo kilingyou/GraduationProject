@@ -133,7 +133,17 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
         }
         TransactionResponse resp = txProcessor.sendTransactionAndGetResponseByContractLoader(
                 CONTRACT_NAME, contractAddress, functionName, params);
-        return resp.getTransactionReceipt().getTransactionHash();
+        org.fisco.bcos.sdk.model.TransactionReceipt receipt = resp.getTransactionReceipt();
+        if (receipt == null) {
+            throw new IllegalStateException("Empty transaction receipt for function: " + functionName);
+        }
+        if (!receipt.isStatusOK()) {
+            throw new RuntimeException("Transaction failed: function=" + functionName
+                    + ", status=" + receipt.getStatus()
+                    + ", statusMsg=" + receipt.getStatusMsg()
+                    + ", txHash=" + receipt.getTransactionHash());
+        }
+        return receipt.getTransactionHash();
     }
 
     @Override
@@ -150,7 +160,9 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
         if (!available) {
             return BlockchainAnchorService.super.generateBlockchainAccount();
         }
+        //随机生成公私钥
         CryptoKeyPair newKeyPair = client.getCryptoSuite().createKeyPair();
+        //取出由公钥算出的地址，与私钥并返回
         return new BlockchainAccount(newKeyPair.getAddress(), newKeyPair.getHexPrivateKey());
     }
 
@@ -166,7 +178,17 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
                 client, keyPair, abiPath, binPath);
         TransactionResponse resp = processor.sendTransactionAndGetResponseByContractLoader(
                 CONTRACT_NAME, contractAddress, functionName, params);
-        return resp.getTransactionReceipt().getTransactionHash();
+        org.fisco.bcos.sdk.model.TransactionReceipt receipt = resp.getTransactionReceipt();
+        if (receipt == null) {
+            throw new IllegalStateException("Empty transaction receipt for function: " + functionName);
+        }
+        if (!receipt.isStatusOK()) {
+            throw new RuntimeException("Transaction failed: function=" + functionName
+                    + ", status=" + receipt.getStatus()
+                    + ", statusMsg=" + receipt.getStatusMsg()
+                    + ", txHash=" + receipt.getTransactionHash());
+        }
+        return receipt.getTransactionHash();
     }
 
     public boolean isAvailable() {

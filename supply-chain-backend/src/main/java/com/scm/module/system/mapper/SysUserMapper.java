@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Delete;
 
 import java.util.List;
 
@@ -30,6 +31,9 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
 
     @Insert("INSERT INTO sys_user_role(user_id, role_id) VALUES(#{userId}, #{roleId})")
     int insertUserRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
+
+    @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")
+    int deleteUserRoles(@Param("userId") Long userId);
 
     @Select("SELECT u.id, u.username, u.enterprise_name AS enterpriseName FROM sys_user u "
             + "INNER JOIN sys_user_role ur ON u.id = ur.user_id "

@@ -16,6 +16,22 @@ export function toggleUserStatus(id, status) {
   return request({ url: `/system/user/${id}/status`, method: 'put', params: { status } })
 }
 
+export function assignUserRole(id, roleKey) {
+  return request({ url: `/system/user/${id}/role`, method: 'put', params: { roleKey } })
+}
+
+export function getRoleConsistency(params) {
+  return request({ url: '/system/user/role-consistency', method: 'get', params })
+}
+
+export function repairRoleConsistency(params) {
+  return request({ url: '/system/user/role-consistency/repair', method: 'post', params })
+}
+
+export function initUserBlockchainAccount(id) {
+  return request({ url: `/system/user/${id}/blockchain-account/init`, method: 'put' })
+}
+
 export function getRoleList() {
   return request({ url: '/system/role/list', method: 'get' })
 }

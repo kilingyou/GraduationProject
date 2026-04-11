@@ -53,7 +53,11 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .formLogin().disable()
                 .authorizeRequests()
                 .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .antMatchers("/api/auth/**", "/api/public/**", "/api/debug/fisco/health", "/api/debug/fisco/block-number", "/api/debug/fisco/tx/**").permitAll()
+                .antMatchers("/api/auth/**", "/api/public/**",
+                        "/api/debug/fisco/health",
+                        "/api/debug/fisco/block-number",
+                        "/api/debug/fisco/tx/**",
+                        "/api/debug/fisco/contract-check").permitAll()
                 .anyRequest().authenticated()
                 .and()
                 .addFilterBefore(publicTraceRateLimitFilter, UsernamePasswordAuthenticationFilter.class)

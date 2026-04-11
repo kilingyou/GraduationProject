@@ -11,6 +11,7 @@ com\scm\module\system\mapper\SysSupplierAuditMapper.class
 com\scm\config\SecurityConfig.class
 com\scm\integration\ipfs\RealIpfsStorageService.class
 com\scm\module\supplier\controller\RejectDispositionController.class
+com\scm\integration\blockchain\ContractRoleSyncService$1.class
 com\scm\module\system\controller\SysRoleController.class
 com\scm\module\supplier\entity\BomItem.class
 com\scm\module\manufacturer\service\impl\RejectDispositionServiceImpl.class
@@ -19,6 +20,7 @@ com\scm\module\distributor\entity\SalesRecord.class
 com\scm\module\regulator\service\impl\RecallNoticeServiceImpl$2.class
 com\scm\module\manufacturer\service\DeviceRecordService.class
 com\scm\module\supplier\dto\ProductionOrderTrackVO$AgreementSummary.class
+com\scm\integration\blockchain\ContractRoleSyncService$ChainRoleResult.class
 com\scm\module\assembler\entity\AssemblyRecord.class
 com\scm\common\Constants.class
 com\scm\module\system\service\impl\SysRoleServiceImpl.class
@@ -45,6 +47,7 @@ com\scm\module\manufacturer\dto\DeviceRegisterRequest.class
 com\scm\module\assembler\controller\AssemblerDashboardController$1.class
 com\scm\module\regulator\controller\RecallController.class
 com\scm\common\exception\GlobalExceptionHandler.class
+com\scm\integration\blockchain\TxReceiptEvidenceService.class
 com\scm\module\supplier\controller\DesignDocumentController.class
 com\scm\module\supplier\service\ProductionRequestViewService.class
 com\scm\module\manufacturer\service\ManufacturingAgreementService.class
@@ -147,6 +150,8 @@ com\scm\security\JwtTokenProvider.class
 com\scm\module\enduser\entity\Decommission.class
 com\scm\module\system\controller\FiscoDebugController.class
 com\scm\module\distributor\service\TransferEventService.class
+com\scm\module\regulator\controller\RecallController$3.class
+com\scm\integration\blockchain\ContractRoleSyncService.class
 com\scm\module\distributor\dto\LogisticsReceiveRequest.class
 com\scm\common\exception\BusinessException.class
 com\scm\module\system\service\impl\SysUserServiceImpl.class

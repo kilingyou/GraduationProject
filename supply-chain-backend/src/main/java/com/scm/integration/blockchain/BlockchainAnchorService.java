@@ -6,7 +6,9 @@ package com.scm.integration.blockchain;
 public interface BlockchainAnchorService {
 
     class BlockchainAccount {
+        //地址
         private final String address;
+        //私钥
         private final String privateKeyHex;
 
         public BlockchainAccount(String address, String privateKeyHex) {
@@ -35,6 +37,8 @@ public interface BlockchainAnchorService {
      * Real implementations derive from the chain's crypto suite;
      * stubs return a deterministic pseudo address.
      */
+
+    //随机生成一个账户地址，用于模拟
     default String generateBlockchainAddress() {
         return "0x" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 40);
     }
@@ -43,6 +47,7 @@ public interface BlockchainAnchorService {
      * Generate blockchain account material (address + private key hex).
      * Stub implementation returns pseudo address and empty private key.
      */
+    //一个完整的账户，包含账户地址与私钥，默认置为空
     default BlockchainAccount generateBlockchainAccount() {
         return new BlockchainAccount(generateBlockchainAddress(), "");
     }

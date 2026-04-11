@@ -70,6 +70,7 @@ contract SupplyChainTraceability {
     event SupplierApproved(address indexed supplier, string qualHash, address approver, uint256 ts);
     event SupplierRevoked(address indexed supplier, address revoker, uint256 ts);
 
+    //监管商通过后，供应商在链上获得合法地址
     function approveSupplier(address supplier, string qualHash) public onlyRole(ROLE_REGULATOR) {
         approvedSuppliers[supplier] = true;
         _supplierQualHash[supplier] = qualHash;
@@ -141,6 +142,7 @@ contract SupplyChainTraceability {
         uint256 ts
     );
 
+    //把图纸的哈希、BOM单哈希上链，指定目标制造商
     function createProductionRequest(
         string orderId,
         address targetManufacturer,
@@ -188,6 +190,7 @@ contract SupplyChainTraceability {
         emit ProductionRequestStatusChanged(orderId, status, msg.sender, now);
     }
 
+    //制造商收到后，调用 signManufacturingAgreement 签署协议。此时链上记录了双方达成合作的铁证
     function signManufacturingAgreement(
         string orderId,
         string agreementHash,
@@ -289,7 +292,7 @@ contract SupplyChainTraceability {
         address operator,
         uint256 ts
     );
-
+//制造商调用 registerDeviceRecord，把这个ECID连同“质检报告的哈希”一起写到区块链上。如果是残次品，就调用 recordReject 记录报废原因
     function registerDeviceRecord(
         string ecid,
         string orderId,
@@ -385,7 +388,7 @@ contract SupplyChainTraceability {
     mapping(string => string) internal _snToEcidListJson;
 
     event AssemblyRecordCreated(string sn, string batchNo, string ecidListJson, address assembler, uint256 ts);
-
+//组装商调用 createAssemblyRecord 和 bindEcidToSn。这是溯源的核心！ 合约把 部件(ECID) -> 整机(SN) 的映射关系死死地绑定在了一起
     function createAssemblyRecord(
         string sn,
         string ecidListJson,
@@ -428,7 +431,7 @@ contract SupplyChainTraceability {
         string transferType,
         uint256 ts
     );
-
+//手机交给顺丰，分销商调用 logTransfer 记录物流单号
     function logTransfer(string sn, string trackingNo, address receiver, string transferType)
         public
         onlyRole(ROLE_DISTRIBUTOR)
@@ -455,7 +458,7 @@ contract SupplyChainTraceability {
     mapping(string => SaleRecord) internal _sales;
 
     event SaleRegistered(string sn, string customerHash, string invoiceHash, address seller, uint256 ts);
-
+//手机卖给顾客，分销商调用 registerSale，将发票摘要上链
     function registerSale(string sn, string customerHash, string invoiceHash) public onlyRole(ROLE_DISTRIBUTOR) {
         _sales[sn] = SaleRecord(true, sn, customerHash, invoiceHash, msg.sender, now);
         emit SaleRegistered(sn, customerHash, invoiceHash, msg.sender, now);
@@ -481,7 +484,7 @@ contract SupplyChainTraceability {
     function publishRecallNotice(string noticeNo, string affectedSns) public onlyRole(ROLE_REGULATOR) {
         emit RecallNoticePublished(noticeNo, affectedSns, msg.sender, now);
     }
-
+//如果发现这批主板有安全隐患，监管机构调用 triggerBatchRecall，系统通过链上数据，瞬间就能反查出这批主板被组装到了哪些SN序列号的手机上，精准发布召回通知
     function triggerBatchRecall(string noticeNo, string batchId, string reason) public onlyRole(ROLE_REGULATOR) {
         _recalledBatch[batchId] = true;
         emit BatchRecallTriggered(noticeNo, batchId, reason, msg.sender, now);
@@ -510,6 +513,7 @@ contract SupplyChainTraceability {
 
     event ProductDecommissioned(string sn, string disposalMethod, address operator, uint256 ts);
 
+//寿命终结，调用 decommissionProduct 记录报废，完成生命周期闭环
     function decommissionProduct(string sn, string disposalMethod) public {
         _decommissioned[sn] = true;
         _decommissionInfo[sn] = DecommissionRecord(true, disposalMethod, msg.sender, now, "");

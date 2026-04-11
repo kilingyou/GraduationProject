@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scm.common.Result;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.ContractRoleSyncService;
 import com.scm.integration.ipfs.IpfsStorageService;
 import com.scm.module.system.entity.SysSupplierAudit;
 import com.scm.module.system.mapper.SysSupplierAuditMapper;
@@ -29,6 +30,7 @@ public class AuditController {
 
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final ContractRoleSyncService contractRoleSyncService;
     private final IpfsStorageService ipfsStorageService;
     @Value("${scm.ipfs.gateway:}")
     private String ipfsGateway;
@@ -73,6 +75,14 @@ public class AuditController {
         audit.setAuditTime(LocalDateTime.now());
         String apPayload = audit.getId() + "|" + audit.getUserId() + "|" + audit.getEnterpriseName();
         audit.setTxHash(blockchainAnchorService.anchor("SUPPLIER_APPROVE", HashUtil.sha256Hex(apPayload)));
+        String digestPayload = audit.getId() + "|"
+                + audit.getUserId() + "|"
+                + (audit.getEnterpriseName() != null ? audit.getEnterpriseName() : "") + "|"
+                + (audit.getCreditCode() != null ? audit.getCreditCode() : "") + "|"
+                + (audit.getLicenseFileHash() != null ? audit.getLicenseFileHash() : "") + "|"
+                + (audit.getCertFileHash() != null ? audit.getCertFileHash() : "") + "|APPROVED";
+        blockchainAnchorService.anchor("SUPPLIER_AUDIT_DIGEST", HashUtil.sha256Hex(digestPayload));
+        contractRoleSyncService.syncUserRoleToChain(audit.getUserId());
         sysSupplierAuditMapper.updateById(audit);
         return Result.ok(audit);
     }
@@ -96,6 +106,8 @@ public class AuditController {
         }
         String rjPayload = audit.getId() + "|REJECT|" + audit.getAuditOpinion();
         audit.setTxHash(blockchainAnchorService.anchor("SUPPLIER_REJECT", HashUtil.sha256Hex(rjPayload)));
+        // Supplier rejected: clear chain role to avoid unauthorized supplier contract calls.
+        contractRoleSyncService.clearUserRoleOnChain(audit.getUserId());
         sysSupplierAuditMapper.updateById(audit);
         return Result.ok(audit);
     }

@@ -1,9 +1,11 @@
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\service\impl\AssemblyRecordServiceImpl.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\dto\AssemblyQcBatchOutcome.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\controller\UserProductController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\mapper\RecallRequestMapper.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\dto\ProductionOrderTrackVO.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\entity\SysOperateLog.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\mapper\UserProductMapper.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\integration\blockchain\ContractRoleSyncService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\dto\LogisticsReceiveRequest.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\controller\ProductionController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\service\UserProductService.java
@@ -28,6 +30,7 @@ D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\mapper\RejectRecordMapper.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\entity\RejectRecord.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\service\impl\DeviceRecordServiceImpl.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\dto\AvailableAssemblyEcidItem.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\dto\SnImportRow.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\controller\AssemblerQualityController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\service\impl\TraceServiceImpl.java
@@ -35,6 +38,7 @@ D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\entity\SysRole.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\controller\SalesController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\service\impl\AssemblyBatchServiceImpl.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\integration\blockchain\SmartContractInvokeService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\service\SalesRecordService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\controller\SysRoleController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\integration\blockchain\BlockchainAnchorService.java
@@ -73,6 +77,7 @@ D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\entity\RecallRequest.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\service\impl\DecommissionServiceImpl.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\service\RecallRequestService.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\dto\RejectRecordVO.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\entity\ProductionBatch.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\service\DesignDocumentService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\common\Constants.java
@@ -88,6 +93,7 @@ D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\entity\BomItem.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\service\impl\AssemblerIntakeServiceImpl.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\controller\ComplaintController.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\service\SupplierAuditGuardService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\controller\SysLogController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\controller\QualityController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\regulator\service\impl\InspectionTaskServiceImpl.java
@@ -102,13 +108,16 @@ D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\entity\UserProduct.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\dto\DeviceRegisterRequest.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\controller\SysMenuController.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\service\impl\RejectDispositionServiceImpl.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\service\impl\SysUserServiceImpl.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\security\LoginUser.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\controller\FiscoDebugController.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\mapper\AssemblerIntakeQueryMapper.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\dto\LogisticsShipRequest.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\controller\BomController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\service\BomService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\enduser\mapper\DecommissionMapper.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\service\RejectDispositionService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\service\impl\QualityReportServiceImpl.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\integration\evidence\EvidenceStorageService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\manufacturer\service\ManufacturingAgreementService.java
@@ -138,6 +147,7 @@ D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\controller\LogisticsController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\distributor\entity\TransferEvent.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\security\JwtAuthenticationFilter.java
+D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\supplier\controller\RejectDispositionController.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\assembler\entity\AssemblyBatch.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\system\service\SysRoleService.java
 D:\java_code\Project\GraduationProjectFinall\supply-chain-backend\src\main\java\com\scm\module\regulator\controller\AuditController.java

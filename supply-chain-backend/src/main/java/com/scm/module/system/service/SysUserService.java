@@ -21,5 +21,9 @@ public interface SysUserService extends IService<SysUser> {
 
     void updateProfile(SysUser user);
 
+    void assignRole(Long userId, String roleKey);
+
+    SysUser initBlockchainAccountIfMissing(Long userId);
+
     IPage<SysUser> listUsers(Page<SysUser> page, String username, String roleKey);
 }

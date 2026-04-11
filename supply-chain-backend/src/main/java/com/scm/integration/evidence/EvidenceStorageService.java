@@ -21,8 +21,11 @@ public class EvidenceStorageService {
         if (data == null || data.length == 0) {
             throw new IllegalArgumentException("Evidence payload is empty");
         }
+        //用sha256Hex计算二进制文件哈希
         String fileHash = HashUtil.sha256Hex(data);
+        //存入ipfs并返回CID
         String cid = ipfsStorageService.add(data, fileName != null ? fileName : "blob.bin");
+        //调用anchor方法执行交易，参数为文件类型（资质证书/营业执照），返回交易哈希
         String txHash = blockchainAnchorService.anchor(anchorBizType, fileHash);
         return new StoredEvidence(fileHash, cid, txHash);
     }

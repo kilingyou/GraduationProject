@@ -200,4 +200,41 @@ public class FiscoDebugController {
             return Result.<Map<String, Object>>fail("Transaction receipt query failed").setData(data);
         }
     }
+
+    /**
+     * Public read-only contract sanity check:
+     * - SDK sender address
+     * - contract owner
+     * - whether SDK sender == owner (required for setRole onlyOwner).
+     */
+    @GetMapping("/contract-check")
+    public Result<Map<String, Object>> contractCheck() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("time", LocalDateTime.now().toString());
+        data.put("blockchainMode", blockchainMode);
+
+        FiscoBcosBlockchainAnchorService fisco = fiscoProvider.getIfAvailable();
+        if (fisco == null) {
+            data.put("ok", false);
+            data.put("message", "FISCO bean not loaded. Check scm.blockchain.mode=fisco.");
+            return Result.ok(data);
+        }
+        try {
+            String sdkAddress = fisco.getClient().getCryptoSuite().getCryptoKeyPair().getAddress();
+            data.put("sdkAddress", sdkAddress);
+            data.put("contractAddress", fisco.getContractAddress());
+            List<Object> ownerResp = fisco.callContract("owner", new ArrayList<Object>());
+            String owner = ownerResp != null && !ownerResp.isEmpty() && ownerResp.get(0) != null
+                    ? String.valueOf(ownerResp.get(0)) : "";
+            data.put("owner", owner);
+            data.put("ownerMatch", sdkAddress != null && sdkAddress.equalsIgnoreCase(owner));
+            data.put("ok", true);
+            data.put("message", "Contract check success");
+            return Result.ok(data);
+        } catch (Exception e) {
+            data.put("ok", false);
+            data.put("message", "Contract check failed: " + e.getMessage());
+            return Result.<Map<String, Object>>fail("Contract check failed").setData(data);
+        }
+    }
 }
