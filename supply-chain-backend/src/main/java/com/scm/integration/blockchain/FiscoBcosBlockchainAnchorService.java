@@ -100,6 +100,7 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
             params.add(bizType != null ? bizType : "");
             params.add(payloadHash != null ? payloadHash : "");
 
+            //调用anchor函数上链，参数为文件名+文件哈希
             TransactionResponse resp = txProcessor.sendTransactionAndGetResponseByContractLoader(
                     CONTRACT_NAME, contractAddress, "anchor", params);
 

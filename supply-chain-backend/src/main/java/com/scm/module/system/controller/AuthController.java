@@ -38,6 +38,7 @@ public class AuthController {
     private final SysUserService sysUserService;
     private final SysMenuService sysMenuService;
 
+    //不同账号登录时走这个方法，校验账号密码后，签发JWT令牌，并配置前端路由所需信息
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody Map<String, String> loginRequest) {
         String username = loginRequest.get("username");
@@ -61,7 +62,7 @@ public class AuthController {
     }
 
 
-    //注册模块
+    //非供应商注册模块
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Result<Void> register(@RequestBody Map<String, Object> params) {
         SysUser user = new SysUser();

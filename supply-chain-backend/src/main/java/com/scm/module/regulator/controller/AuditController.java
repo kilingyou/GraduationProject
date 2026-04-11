@@ -35,6 +35,7 @@ public class AuditController {
     @Value("${scm.ipfs.gateway:}")
     private String ipfsGateway;
 
+    //过滤approved的账号，显示未审核供应商账号返回前端
     @GetMapping("/list")
     public Result<List<SysSupplierAudit>> list(@RequestParam(required = false) String status) {
         LambdaQueryWrapper<SysSupplierAudit> wrapper = new LambdaQueryWrapper<SysSupplierAudit>()

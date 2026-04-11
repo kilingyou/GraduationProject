@@ -88,10 +88,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 } catch (IOException e) {
                     throw new BusinessException("资质文件读取失败");
                 }
-                String biz = i == 0 ? "SUPPLIER_LICENSE" : "SUPPLIER_CERT";
-                //包含文件哈希、CID、交易哈希。
+                // 资质文件仅入 IPFS 与库表；链上 anchor 在监管审核通过后执行（见 AuditController.approve）。
                 EvidenceStorageService.StoredEvidence ev =
-                        evidenceStorageService.store(bytes, f.getOriginalFilename(), biz);
+                        evidenceStorageService.storeWithoutAnchor(bytes, f.getOriginalFilename());
                 if (i == 0) {
                     audit.setLicenseFileHash(ev.getFileHash());
                     audit.setLicenseIpfsCid(ev.getIpfsCid());

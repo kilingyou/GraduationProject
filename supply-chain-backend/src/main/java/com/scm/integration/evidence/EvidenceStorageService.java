@@ -31,6 +31,18 @@ public class EvidenceStorageService {
     }
 
     /**
+     * IPFS 存证 + 哈希计算；不上链。用于待监管审核的数据（审核通过后再单独 anchor）。
+     */
+    public StoredEvidence storeWithoutAnchor(byte[] data, String fileName) {
+        if (data == null || data.length == 0) {
+            throw new IllegalArgumentException("Evidence payload is empty");
+        }
+        String fileHash = HashUtil.sha256Hex(data);
+        String cid = ipfsStorageService.add(data, fileName != null ? fileName : "blob.bin");
+        return new StoredEvidence(fileHash, cid, null);
+    }
+
+    /**
      * Load payload from IPFS (or stub) and confirm it matches the expected SHA-256.
      */
     public boolean verifyContentHash(String ipfsCid, String expectedFileHash) {
