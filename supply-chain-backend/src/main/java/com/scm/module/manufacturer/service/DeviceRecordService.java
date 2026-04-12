@@ -16,7 +16,21 @@ public interface DeviceRecordService extends IService<DeviceRecord> {
 
     List<DeviceRecord> listByBatch(String batchId);
 
-    IPage<DeviceRecord> pageForManufacturer(Long manufacturerId, Page<DeviceRecord> page, String batchId);
+    /**
+     * @param keyword        模糊匹配 ECID / 订单号 / 批次号 / 设备类型（OR）
+     * @param status         设备状态精确匹配，如 QC_PASS、PRODUCED
+     * @param chainRegistered 1 已上链；0 未上链（含 null）
+     * @param releasedToAssembler 1 已放行组装；0 未放行（含 null）
+     */
+    IPage<DeviceRecord> pageForManufacturer(
+            Long manufacturerId,
+            Page<DeviceRecord> page,
+            String batchId,
+            String orderId,
+            String keyword,
+            String status,
+            Integer chainRegistered,
+            Integer releasedToAssembler);
 
     /**
      * Stub: register device records on chain by IDs.

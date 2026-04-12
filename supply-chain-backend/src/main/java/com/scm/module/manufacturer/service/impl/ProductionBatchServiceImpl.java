@@ -188,9 +188,25 @@ public class ProductionBatchServiceImpl
     }
 
     @Override
-    public IPage<ProductionBatch> pageByManufacturer(Long manufacturerId, Page<ProductionBatch> page) {
+    public List<ProductionBatch> listByOrderIdAndManufacturer(String orderId, Long manufacturerId) {
+        if (orderId == null || orderId.trim().isEmpty() || manufacturerId == null) {
+            return java.util.Collections.emptyList();
+        }
+        List<ProductionBatch> rows = list(new LambdaQueryWrapper<ProductionBatch>()
+                .eq(ProductionBatch::getOrderId, orderId.trim())
+                .eq(ProductionBatch::getManufacturerId, manufacturerId)
+                .orderByAsc(ProductionBatch::getCreateTime));
+        fillProductionBatchBomSummaries(rows);
+        return rows;
+    }
+
+    @Override
+    public IPage<ProductionBatch> pageByManufacturer(Long manufacturerId, Page<ProductionBatch> page, String orderId) {
+        // 注意：.eq(cond, col, val) 的 val 会先求值，orderId 为 null 时不能写 orderId.trim()
+        String orderIdEq = StringUtils.hasText(orderId) ? orderId.trim() : null;
         LambdaQueryWrapper<ProductionBatch> w = new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getManufacturerId, manufacturerId)
+                .eq(orderIdEq != null, ProductionBatch::getOrderId, orderIdEq)
                 .orderByDesc(ProductionBatch::getCreateTime);
         IPage<ProductionBatch> raw = page(page, w);
         fillProductionBatchBomSummaries(raw.getRecords());

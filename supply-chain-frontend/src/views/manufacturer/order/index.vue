@@ -71,7 +71,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" align="center" fixed="right">
+        <el-table-column label="操作" width="260" align="center" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="row.status === 'PENDING_ACCEPTANCE'"
@@ -88,6 +88,14 @@
               @click="openAgreementDialog(row)"
             >
               查看协议
+            </el-button>
+            <el-button
+              v-if="orderScope === 'mine' && showProductionProgress(row)"
+              type="primary"
+              link
+              @click="openProductionProgress(row)"
+            >
+              生产进度
             </el-button>
           </template>
         </el-table-column>
@@ -179,17 +187,70 @@
       </el-descriptions>
       <el-empty v-else description="暂无协议信息" />
     </el-dialog>
+
+    <!-- 生产进度：摘要 + 跳转生产/质检 -->
+    <el-dialog
+      v-model="progressVisible"
+      :title="progressOrder ? `生产进度 — ${progressOrder.orderId}` : '生产进度'"
+      width="720px"
+      destroy-on-close
+      @opened="onProgressOpened"
+    >
+      <div v-loading="progressLoading">
+        <template v-if="progressSummary">
+          <el-descriptions :column="2" border class="mb-16">
+            <el-descriptions-item label="订单状态">
+              <el-tag :type="statusType(progressSummary.orderStatus)" size="small">
+                {{ statusLabel(progressSummary.orderStatus) }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="订单套数">{{ progressSummary.orderQuantity ?? '—' }}</el-descriptions-item>
+            <el-descriptions-item label="生产批次">{{ progressSummary.batchCount }} 个（已完工 {{ progressSummary.batchCompletedCount }}）</el-descriptions-item>
+            <el-descriptions-item label="ECID 总数">{{ progressSummary.ecidTotal }}</el-descriptions-item>
+            <el-descriptions-item label="质检通过">{{ progressSummary.ecidQcPassCount }}</el-descriptions-item>
+            <el-descriptions-item label="已上链">{{ progressSummary.ecidOnChainCount }}</el-descriptions-item>
+            <el-descriptions-item label="已放行组装">{{ progressSummary.ecidReleasedToAssemblerCount }}</el-descriptions-item>
+            <el-descriptions-item label="已组装">{{ progressSummary.ecidAssembledCount }}</el-descriptions-item>
+          </el-descriptions>
+          <div class="progress-actions mb-16">
+            <el-button type="primary" @click="goProductionFromProgress()">打开生产管理（本订单）</el-button>
+            <el-button type="success" plain @click="goQualityFromProgress()">打开质检管理（本订单）</el-button>
+          </div>
+          <el-table v-if="(progressSummary.batches || []).length" :data="progressSummary.batches" border stripe size="small">
+            <el-table-column prop="batchId" label="批次号" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="bomPartSummary" label="子件" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="plannedQty" label="计划" width="72" align="center" />
+            <el-table-column prop="completedQty" label="完成" width="72" align="center" />
+            <el-table-column prop="status" label="状态" width="100" align="center" />
+            <el-table-column label="操作" width="120" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="goProductionBatch(row.batchId)">ECID</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="尚未创建生产批次" />
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getOrderList, acceptOrder, getAgreement, getManufacturerOrderDesignFileBlob } from '@/api/manufacturer'
+import {
+  getOrderList,
+  acceptOrder,
+  getAgreement,
+  getManufacturerOrderDesignFileBlob,
+  getOrderProductionSummary
+} from '@/api/manufacturer'
 import { useUserStore } from '@/store/user'
 
 const userStore = useUserStore()
+const router = useRouter()
 
 const STATUS_MAP = {
   PENDING_ACCEPTANCE: { label: '待接单', type: 'warning' },
@@ -340,6 +401,55 @@ async function openAgreementDialog(row) {
   } catch { /* interceptor */ }
 }
 
+const progressVisible = ref(false)
+const progressLoading = ref(false)
+const progressOrder = ref(null)
+const progressSummary = ref(null)
+
+function showProductionProgress(row) {
+  return row && ['ACCEPTED', 'IN_PRODUCTION', 'COMPLETED'].includes(row.status)
+}
+
+function openProductionProgress(row) {
+  progressOrder.value = row
+  progressSummary.value = null
+  progressVisible.value = true
+}
+
+async function onProgressOpened() {
+  if (!progressOrder.value?.orderId) return
+  progressLoading.value = true
+  try {
+    const { data } = await getOrderProductionSummary(progressOrder.value.orderId)
+    progressSummary.value = data
+  } catch {
+    progressSummary.value = null
+  } finally {
+    progressLoading.value = false
+  }
+}
+
+function goProductionFromProgress() {
+  if (!progressOrder.value?.orderId) return
+  router.push({ name: 'Production', query: { orderId: progressOrder.value.orderId } })
+  progressVisible.value = false
+}
+
+function goQualityFromProgress() {
+  if (!progressOrder.value?.orderId) return
+  router.push({ name: 'MfgQuality', query: { orderId: progressOrder.value.orderId } })
+  progressVisible.value = false
+}
+
+function goProductionBatch(batchId) {
+  if (!progressOrder.value?.orderId || !batchId) return
+  router.push({
+    name: 'Production',
+    query: { orderId: progressOrder.value.orderId, batchId }
+  })
+  progressVisible.value = false
+}
+
 onMounted(fetchOrders)
 </script>
 
@@ -369,6 +479,16 @@ onMounted(fetchOrders)
     font-family: monospace;
     font-size: 12px;
     max-width: 400px;
+  }
+
+  .mb-16 {
+    margin-bottom: 16px;
+  }
+
+  .progress-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 }
 </style>

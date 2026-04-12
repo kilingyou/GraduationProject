@@ -175,11 +175,45 @@ public class DeviceRecordServiceImpl
     }
 
     @Override
-    public IPage<DeviceRecord> pageForManufacturer(Long manufacturerId, Page<DeviceRecord> page, String batchId) {
+    public IPage<DeviceRecord> pageForManufacturer(
+            Long manufacturerId,
+            Page<DeviceRecord> page,
+            String batchId,
+            String orderId,
+            String keyword,
+            String status,
+            Integer chainRegistered,
+            Integer releasedToAssembler) {
+        String orderIdEq = StringUtils.hasText(orderId) ? orderId.trim() : null;
         LambdaQueryWrapper<DeviceRecord> w = new LambdaQueryWrapper<DeviceRecord>()
                 .eq(DeviceRecord::getManufacturerId, manufacturerId)
                 .eq(StringUtils.hasText(batchId), DeviceRecord::getBatchId, batchId)
-                .orderByDesc(DeviceRecord::getCreateTime);
+                .eq(orderIdEq != null, DeviceRecord::getOrderId, orderIdEq);
+        if (StringUtils.hasText(keyword)) {
+            String kw = keyword.trim();
+            w.and(q -> q.like(DeviceRecord::getEcid, kw)
+                    .or().like(DeviceRecord::getOrderId, kw)
+                    .or().like(DeviceRecord::getBatchId, kw)
+                    .or().like(DeviceRecord::getDeviceType, kw));
+        }
+        if (StringUtils.hasText(status)) {
+            w.eq(DeviceRecord::getStatus, status.trim());
+        }
+        if (chainRegistered != null) {
+            if (chainRegistered == 1) {
+                w.eq(DeviceRecord::getChainRegistered, 1);
+            } else if (chainRegistered == 0) {
+                w.and(q -> q.isNull(DeviceRecord::getChainRegistered).or().ne(DeviceRecord::getChainRegistered, 1));
+            }
+        }
+        if (releasedToAssembler != null) {
+            if (releasedToAssembler == 1) {
+                w.eq(DeviceRecord::getReleasedToAssembler, 1);
+            } else if (releasedToAssembler == 0) {
+                w.and(q -> q.isNull(DeviceRecord::getReleasedToAssembler).or().ne(DeviceRecord::getReleasedToAssembler, 1));
+            }
+        }
+        w.orderByDesc(DeviceRecord::getCreateTime);
         IPage<DeviceRecord> raw = page(page, w);
         fillDeviceBomSummaries(raw.getRecords());
         return raw;

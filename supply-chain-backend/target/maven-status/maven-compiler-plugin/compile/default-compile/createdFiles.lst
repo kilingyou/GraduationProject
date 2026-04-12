@@ -45,6 +45,7 @@ com\scm\module\manufacturer\entity\ProductionBatch.class
 com\scm\module\system\entity\SysSupplierAudit.class
 com\scm\module\enduser\controller\DecommissionController.class
 com\scm\module\manufacturer\dto\DeviceRegisterRequest.class
+com\scm\module\manufacturer\dto\ManufacturerOrderProductionSummaryVO$BatchBrief.class
 com\scm\module\assembler\controller\AssemblerDashboardController$1.class
 com\scm\module\regulator\controller\RecallController.class
 com\scm\common\exception\GlobalExceptionHandler.class
@@ -184,6 +185,7 @@ com\scm\module\supplier\entity\DesignDocument.class
 com\scm\module\regulator\controller\RecallController$1.class
 com\scm\SupplyChainApplication.class
 com\scm\config\CorsConfig.class
+com\scm\module\manufacturer\dto\ManufacturerOrderProductionSummaryVO.class
 com\scm\module\manufacturer\mapper\QualityReportMapper.class
 com\scm\module\assembler\controller\AssemblerDashboardController.class
 com\scm\module\regulator\mapper\RecallNoticeMapper.class

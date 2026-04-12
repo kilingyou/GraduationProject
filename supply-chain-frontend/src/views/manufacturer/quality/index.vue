@@ -1,5 +1,14 @@
 <template>
   <div class="quality-container">
+    <el-card v-if="routeOrderId" shadow="never" class="order-context-card">
+      <div class="qc-context-bar">
+        <span class="qc-context-label">当前聚焦订单</span>
+        <el-tag type="success" size="large">{{ routeOrderId }}</el-tag>
+        <span class="qc-context-hint">质检目标请填 ECID 或「生产管理」中该订单下的批次号。</span>
+        <el-button type="primary" link @click="goProductionForOrder">去生产管理</el-button>
+        <el-button size="small" @click="clearOrderContext">清除</el-button>
+      </div>
+    </el-card>
     <el-card shadow="never">
       <el-tabs v-model="activeTab">
         <!-- 质检操作 -->
@@ -192,7 +201,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   uploadQualityReport,
@@ -202,6 +212,24 @@ import {
   getRejectRecordList,
   confirmRejectDestroy
 } from '@/api/manufacturer'
+
+const route = useRoute()
+const router = useRouter()
+
+const routeOrderId = computed(() => {
+  const q = route.query.orderId
+  if (Array.isArray(q)) return (q[0] || '').trim()
+  return typeof q === 'string' ? q.trim() : ''
+})
+
+function goProductionForOrder() {
+  if (!routeOrderId.value) return
+  router.push({ name: 'Production', query: { orderId: routeOrderId.value } })
+}
+
+function clearOrderContext() {
+  router.replace({ name: 'MfgQuality', query: {} })
+}
 
 const activeTab = ref('operation')
 const submitting = ref(false)
@@ -377,6 +405,36 @@ onMounted(fetchReports)
 
 <style scoped lang="scss">
 .quality-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .order-context-card {
+    :deep(.el-card__body) {
+      padding: 12px 16px;
+    }
+  }
+
+  .qc-context-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+
+  .qc-context-label {
+    font-weight: 600;
+    color: #606266;
+  }
+
+  .qc-context-hint {
+    color: #909399;
+    font-size: 13px;
+    flex: 1;
+    min-width: 200px;
+  }
+
   .qc-flow-alert {
     margin-bottom: 16px;
   }

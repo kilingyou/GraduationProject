@@ -30,6 +30,14 @@ export function getOrderBomItemsForProduction(orderId) {
   return request({ url: `/manufacturer/production/order/${orderId}/bom-items`, method: 'get' })
 }
 
+/** 订单生产进度摘要（批次 + ECID 统计），需已签协议 */
+export function getOrderProductionSummary(orderId) {
+  return request({
+    url: `/manufacturer/production/order/${encodeURIComponent(orderId)}/production-summary`,
+    method: 'get'
+  })
+}
+
 export function completeProductionBatch(batchId) {
   return request({ url: '/manufacturer/production/batch/complete', method: 'post', data: { batchId } })
 }

@@ -18,7 +18,12 @@ public interface ProductionBatchService extends IService<ProductionBatch> {
 
     List<ProductionBatch> listByOrderId(String orderId);
 
-    IPage<ProductionBatch> pageByManufacturer(Long manufacturerId, Page<ProductionBatch> page);
+    /**
+     * 本制造商在某订单下的批次（含 BOM 行摘要填充）。
+     */
+    List<ProductionBatch> listByOrderIdAndManufacturer(String orderId, Long manufacturerId);
+
+    IPage<ProductionBatch> pageByManufacturer(Long manufacturerId, Page<ProductionBatch> page, String orderId);
 
     /**
      * 批次完工：本批次全部 ECID 已上链且质检合格；若订单下本企业所有批次均已完工，则订单标记为 COMPLETED。

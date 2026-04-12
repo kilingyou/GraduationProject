@@ -3,9 +3,11 @@ package com.scm.module.manufacturer.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.scm.common.Constants;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
 import com.scm.module.manufacturer.dto.DeviceRegisterRequest;
+import com.scm.module.manufacturer.dto.ManufacturerOrderProductionSummaryVO;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.ManufacturingAgreement;
 import com.scm.module.manufacturer.entity.ProductionBatch;
@@ -101,6 +103,74 @@ public class ProductionController {
         return Result.ok(items != null ? items : Collections.emptyList());
     }
 
+    /**
+     * 订单生产进度摘要：批次列表 + ECID 状态统计，嵌入「订单接收」详情与生产页上下文。
+     */
+    @GetMapping("/order/{orderId}/production-summary")
+    public Result<ManufacturerOrderProductionSummaryVO> orderProductionSummary(@PathVariable String orderId) {
+        LoginUser user = currentUser();
+        if (!StringUtils.hasText(orderId)) {
+            return Result.fail("订单号无效");
+        }
+        String oid = orderId.trim();
+        ProductionRequest order = productionRequestService.getOne(
+                new LambdaQueryWrapper<ProductionRequest>().eq(ProductionRequest::getOrderId, oid));
+        if (order == null) {
+            return Result.fail("订单不存在");
+        }
+        long agreed = manufacturingAgreementService.count(
+                new LambdaQueryWrapper<ManufacturingAgreement>()
+                        .eq(ManufacturingAgreement::getOrderId, order.getOrderId())
+                        .eq(ManufacturingAgreement::getManufacturerId, user.getUserId()));
+        if (agreed == 0) {
+            return Result.fail("无权查看该订单的生产摘要");
+        }
+        ManufacturerOrderProductionSummaryVO vo = new ManufacturerOrderProductionSummaryVO()
+                .setOrderId(order.getOrderId())
+                .setOrderStatus(order.getStatus())
+                .setOrderQuantity(order.getQuantity());
+
+        List<ProductionBatch> batches = batchService.listByOrderIdAndManufacturer(oid, user.getUserId());
+        vo.setBatchCount(batches.size());
+        int batchDone = 0;
+        List<ManufacturerOrderProductionSummaryVO.BatchBrief> briefs = new ArrayList<>();
+        for (ProductionBatch b : batches) {
+            if ("COMPLETED".equals(b.getStatus())) {
+                batchDone++;
+            }
+            briefs.add(new ManufacturerOrderProductionSummaryVO.BatchBrief()
+                    .setBatchId(b.getBatchId())
+                    .setStatus(b.getStatus())
+                    .setPlannedQty(b.getPlannedQty())
+                    .setCompletedQty(b.getCompletedQty())
+                    .setBomPartSummary(b.getBomPartSummary()));
+        }
+        vo.setBatchCompletedCount(batchDone);
+        vo.setBatches(briefs);
+
+        Long mid = user.getUserId();
+        vo.setEcidTotal(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getOrderId, oid)
+                .eq(DeviceRecord::getManufacturerId, mid)));
+        vo.setEcidQcPassCount(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getOrderId, oid)
+                .eq(DeviceRecord::getManufacturerId, mid)
+                .eq(DeviceRecord::getStatus, Constants.QC_PASS)));
+        vo.setEcidOnChainCount(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getOrderId, oid)
+                .eq(DeviceRecord::getManufacturerId, mid)
+                .eq(DeviceRecord::getChainRegistered, 1)));
+        vo.setEcidReleasedToAssemblerCount(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getOrderId, oid)
+                .eq(DeviceRecord::getManufacturerId, mid)
+                .eq(DeviceRecord::getReleasedToAssembler, 1)));
+        vo.setEcidAssembledCount(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getOrderId, oid)
+                .eq(DeviceRecord::getManufacturerId, mid)
+                .eq(DeviceRecord::getStatus, Constants.ASSEMBLED)));
+        return Result.ok(vo);
+    }
+
     private static Long parseLongParam(Object raw) {
         if (raw == null) {
             return null;
@@ -132,10 +202,11 @@ public class ProductionController {
     @GetMapping("/batch/list")
     public Result<PageResult<ProductionBatch>> listBatches(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) String orderId) {
         LoginUser user = currentUser();
         Page<ProductionBatch> p = new Page<>(page, pageSize);
-        IPage<ProductionBatch> raw = batchService.pageByManufacturer(user.getUserId(), p);
+        IPage<ProductionBatch> raw = batchService.pageByManufacturer(user.getUserId(), p, orderId);
         PageResult<ProductionBatch> pr = new PageResult<ProductionBatch>()
                 .setRecords(raw.getRecords())
                 .setTotal(raw.getTotal())
@@ -182,10 +253,16 @@ public class ProductionController {
     public Result<PageResult<DeviceRecord>> listEcids(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(required = false) String batchId) {
+            @RequestParam(required = false) String batchId,
+            @RequestParam(required = false) String orderId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer chainRegistered,
+            @RequestParam(required = false) Integer releasedToAssembler) {
         LoginUser user = currentUser();
         Page<DeviceRecord> p = new Page<>(page, pageSize);
-        IPage<DeviceRecord> raw = deviceRecordService.pageForManufacturer(user.getUserId(), p, batchId);
+        IPage<DeviceRecord> raw = deviceRecordService.pageForManufacturer(
+                user.getUserId(), p, batchId, orderId, keyword, status, chainRegistered, releasedToAssembler);
         PageResult<DeviceRecord> pr = new PageResult<DeviceRecord>()
                 .setRecords(raw.getRecords())
                 .setTotal(raw.getTotal())

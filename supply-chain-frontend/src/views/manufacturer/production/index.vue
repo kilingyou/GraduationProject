@@ -10,6 +10,26 @@
       </el-steps>
     </el-card>
 
+    <el-card v-if="routeOrderId" shadow="never" class="context-order-card">
+      <div class="context-order-bar">
+        <div class="context-order-main">
+          <span class="context-label">当前订单</span>
+          <el-tag type="primary" effect="dark" size="large">{{ routeOrderId }}</el-tag>
+          <template v-if="contextSummary">
+            <span class="context-meta">
+              批次 {{ contextSummary.batchCount }} · ECID {{ contextSummary.ecidTotal }} · 已上链
+              {{ contextSummary.ecidOnChainCount }} · 已放行组装 {{ contextSummary.ecidReleasedToAssemblerCount }}
+            </span>
+          </template>
+        </div>
+        <div class="context-order-actions">
+          <el-button type="primary" link :loading="contextSummaryLoading" @click="reloadContextSummary">刷新摘要</el-button>
+          <el-button type="success" plain size="small" @click="goQualityWithOrder">去质检</el-button>
+          <el-button size="small" @click="clearOrderContext">清除定位</el-button>
+        </div>
+      </div>
+    </el-card>
+
     <el-card shadow="never">
       <el-tabs v-model="activeTab">
         <!-- 批次管理 -->
@@ -132,7 +152,7 @@
             <el-form-item label="批次" prop="batchId">
               <el-select
                 v-model="ecidGenForm.batchId"
-                placeholder="选择批次（表格仅显示该批次设备）"
+                placeholder="按批次缩小列表（可与下方筛选组合）"
                 filterable
                 clearable
                 style="width: 280px"
@@ -191,6 +211,43 @@
               放行给组装商 ({{ selectedEcids.length }})
             </el-button>
           </div>
+
+          <el-form :inline="true" class="ecid-filter-bar" @submit.prevent="handleEcidFilterSearch">
+            <el-form-item label="关键字">
+              <el-input
+                v-model="ecidQuery.keyword"
+                clearable
+                placeholder="ECID / 订单号 / 批次号 / 类型"
+                style="width: 220px"
+                @keyup.enter="handleEcidFilterSearch"
+              />
+            </el-form-item>
+            <el-form-item label="状态">
+              <el-select v-model="ecidQuery.status" placeholder="全部" clearable style="width: 140px">
+                <el-option label="已生成" value="PRODUCED" />
+                <el-option label="质检通过" value="QC_PASS" />
+                <el-option label="质检不合格" value="QC_FAILED" />
+                <el-option label="不合格作废" value="REJECTED" />
+                <el-option label="已组装" value="ASSEMBLED" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="上链">
+              <el-select v-model="ecidQuery.chainFlag" placeholder="全部" clearable style="width: 120px">
+                <el-option label="已上链" value="1" />
+                <el-option label="未上链" value="0" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="组装放行">
+              <el-select v-model="ecidQuery.releasedFlag" placeholder="全部" clearable style="width: 120px">
+                <el-option label="已放行" value="1" />
+                <el-option label="待放行" value="0" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="handleEcidFilterSearch">查询</el-button>
+              <el-button @click="handleEcidFilterReset">重置</el-button>
+            </el-form-item>
+          </el-form>
 
           <el-table
             v-loading="ecidLoading"
@@ -316,6 +373,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrderList,
@@ -326,9 +384,13 @@ import {
   getEcidList,
   getOrderBomItemsForProduction,
   registerEcids,
-  releasePartsToAssembler
+  releasePartsToAssembler,
+  getOrderProductionSummary
 } from '@/api/manufacturer'
 import { useUserStore } from '@/store/user'
+
+const route = useRoute()
+const router = useRouter()
 
 const activeTab = ref('batch')
 const activeStep = computed(() => {
@@ -365,7 +427,7 @@ const batchList = ref([])
 const batchTotal = ref(0)
 const batchFormRef = ref(null)
 
-const batchQuery = reactive({ page: 1, pageSize: 10 })
+const batchQuery = reactive({ page: 1, pageSize: 10, orderId: undefined })
 const bomItemOptions = ref([])
 
 const batchForm = reactive({ orderId: '', bomItemId: null, plannedQty: 100 })
@@ -401,7 +463,9 @@ async function onBatchOrderChange(orderId) {
 async function fetchBatches() {
   batchLoading.value = true
   try {
-    const { data } = await getBatchList(batchQuery)
+    const params = { page: batchQuery.page, pageSize: batchQuery.pageSize }
+    if (batchQuery.orderId) params.orderId = batchQuery.orderId
+    const { data } = await getBatchList(params)
     batchList.value = data.records ?? data.list ?? []
     batchTotal.value = data.total ?? 0
   } catch { /* handled by interceptor */ } finally {
@@ -420,10 +484,15 @@ async function handleCreateBatch() {
     }
     await createBatch(payload)
     ElMessage.success('批次创建成功')
-    batchForm.orderId = ''
     batchForm.bomItemId = null
     bomItemOptions.value = []
     batchForm.plannedQty = 100
+    if (routeOrderId.value) {
+      batchForm.orderId = routeOrderId.value
+      onBatchOrderChange(routeOrderId.value)
+    } else {
+      batchForm.orderId = ''
+    }
     fetchBatches()
     fetchBatchDropdownOptions()
   } catch { /* handled by interceptor */ } finally {
@@ -535,7 +604,15 @@ const ecidTotal = ref(0)
 const selectedEcids = ref([])
 const ecidGenFormRef = ref(null)
 
-const ecidQuery = reactive({ page: 1, pageSize: 20 })
+const ecidQuery = reactive({
+  page: 1,
+  pageSize: 20,
+  orderId: undefined,
+  keyword: '',
+  status: '',
+  chainFlag: '',
+  releasedFlag: ''
+})
 const ecidGenForm = reactive({ batchId: '', quantity: 10, deviceType: '' })
 
 /** 下拉用：一次拉足批次，避免表格分页导致选项不全 */
@@ -579,7 +656,9 @@ watch(
 
 async function fetchBatchDropdownOptions() {
   try {
-    const { data } = await getBatchList({ page: 1, pageSize: 500 })
+    const params = { page: 1, pageSize: 500 }
+    if (batchQuery.orderId) params.orderId = batchQuery.orderId
+    const { data } = await getBatchList(params)
     batchDropdownList.value = data.records ?? data.list ?? []
   } catch { /* interceptor */ }
 }
@@ -615,11 +694,35 @@ async function copyText(value, label = '内容') {
   }
 }
 
+function handleEcidFilterSearch() {
+  ecidQuery.page = 1
+  fetchEcids()
+}
+
+function handleEcidFilterReset() {
+  ecidQuery.keyword = ''
+  ecidQuery.status = ''
+  ecidQuery.chainFlag = ''
+  ecidQuery.releasedFlag = ''
+  ecidQuery.page = 1
+  fetchEcids()
+}
+
 async function fetchEcids() {
   ecidLoading.value = true
   try {
     const params = { page: ecidQuery.page, pageSize: ecidQuery.pageSize }
     if (ecidGenForm.batchId) params.batchId = ecidGenForm.batchId
+    if (ecidQuery.orderId) params.orderId = ecidQuery.orderId
+    const kw = (ecidQuery.keyword || '').trim()
+    if (kw) params.keyword = kw
+    if (ecidQuery.status) params.status = ecidQuery.status
+    if (ecidQuery.chainFlag === '0' || ecidQuery.chainFlag === '1') {
+      params.chainRegistered = Number(ecidQuery.chainFlag)
+    }
+    if (ecidQuery.releasedFlag === '0' || ecidQuery.releasedFlag === '1') {
+      params.releasedToAssembler = Number(ecidQuery.releasedFlag)
+    }
     const { data } = await getEcidList(params)
     ecidList.value = data.records ?? data.list ?? []
     ecidTotal.value = data.total ?? 0
@@ -730,6 +833,84 @@ async function handleSingleExport(row) {
   }
 }
 
+const routeOrderId = computed(() => {
+  const q = route.query.orderId
+  if (Array.isArray(q)) return (q[0] || '').trim()
+  return typeof q === 'string' ? q.trim() : ''
+})
+
+const routeBatchId = computed(() => {
+  const q = route.query.batchId
+  if (Array.isArray(q)) return (q[0] || '').trim()
+  return typeof q === 'string' ? q.trim() : ''
+})
+
+const contextSummary = ref(null)
+const contextSummaryLoading = ref(false)
+
+async function loadContextSummary(orderId) {
+  if (!orderId) {
+    contextSummary.value = null
+    return
+  }
+  contextSummaryLoading.value = true
+  try {
+    const { data } = await getOrderProductionSummary(orderId)
+    contextSummary.value = data
+  } catch {
+    contextSummary.value = null
+  } finally {
+    contextSummaryLoading.value = false
+  }
+}
+
+function reloadContextSummary() {
+  if (routeOrderId.value) loadContextSummary(routeOrderId.value)
+}
+
+function clearOrderContext() {
+  router.replace({ name: 'Production', query: {} })
+}
+
+function goQualityWithOrder() {
+  if (!routeOrderId.value) return
+  router.push({ name: 'MfgQuality', query: { orderId: routeOrderId.value } })
+}
+
+function syncRouteToProductionForm() {
+  const oid = routeOrderId.value
+  const bid = routeBatchId.value
+  if (oid) {
+    batchForm.orderId = oid
+    onBatchOrderChange(oid)
+    batchQuery.orderId = oid
+    ecidQuery.orderId = oid
+  } else {
+    batchForm.orderId = ''
+    batchForm.bomItemId = null
+    bomItemOptions.value = []
+    batchQuery.orderId = undefined
+    ecidQuery.orderId = undefined
+  }
+  if (bid) {
+    ecidGenForm.batchId = bid
+    activeTab.value = 'ecid'
+  }
+  fetchBatches()
+  fetchEcids()
+  fetchBatchDropdownOptions()
+  if (oid) {
+    loadContextSummary(oid)
+  } else {
+    contextSummary.value = null
+  }
+}
+
+watch(
+  () => `${route.query.orderId || ''}|${route.query.batchId || ''}`,
+  () => syncRouteToProductionForm()
+)
+
 watch(activeTab, (name) => {
   if (name === 'ecid') {
     fetchBatchDropdownOptions()
@@ -738,9 +919,8 @@ watch(activeTab, (name) => {
 
 onMounted(() => {
   fetchOrderOptions()
-  fetchBatches()
   fetchBatchDropdownOptions()
-  fetchEcids()
+  syncRouteToProductionForm()
 })
 </script>
 
@@ -756,6 +936,44 @@ onMounted(() => {
     }
   }
 
+  .context-order-card {
+    :deep(.el-card__body) {
+      padding: 12px 16px;
+    }
+  }
+
+  .context-order-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .context-order-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .context-label {
+    font-weight: 600;
+    color: #606266;
+  }
+
+  .context-meta {
+    font-size: 13px;
+    color: #909399;
+  }
+
+  .context-order-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
   .inline-form {
     margin-bottom: 16px;
     padding-bottom: 16px;
@@ -764,6 +982,14 @@ onMounted(() => {
 
   .batch-hint {
     margin-bottom: 12px;
+  }
+
+  .ecid-filter-bar {
+    margin-bottom: 12px;
+    padding: 12px 12px 4px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #ebeef5;
   }
 
   .bulk-bar {
