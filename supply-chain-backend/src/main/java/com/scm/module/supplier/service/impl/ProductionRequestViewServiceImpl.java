@@ -194,6 +194,10 @@ public class ProductionRequestViewServiceImpl implements ProductionRequestViewSe
             SysUser u = sysUserMapper.selectById(order.getTargetManufacturer());
             vo.setTargetManufacturerName(displayUserName(u));
         }
+        if (order.getAssemblyAssemblerId() != null) {
+            SysUser a = sysUserMapper.selectById(order.getAssemblyAssemblerId());
+            vo.setAssemblyAssemblerName(displayUserName(a));
+        }
         return vo;
     }
 

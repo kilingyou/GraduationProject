@@ -83,6 +83,24 @@ export function listManufacturerOptions() {
   return request({ url: '/supplier/manufacturers', method: 'get' })
 }
 
+/** 可选组装商（用户 ID），用于生产订单「指定组装商」 */
+export function listAssemblerOptions() {
+  return request({ url: '/supplier/assemblers', method: 'get' })
+}
+
+/**
+ * 指定可领用本单部件的组装商；body.assemblerUserId 为 null 或不传表示不限。
+ * @param {number} orderDbId 订单主键 id
+ * @param {{ assemblerUserId?: number|null }} body
+ */
+export function designateAssemblyAssembler(orderDbId, body) {
+  return request({
+    url: `/supplier/order/${orderDbId}/designate-assembler`,
+    method: 'post',
+    data: body || {}
+  })
+}
+
 export function getRejectDispositionList(params) {
   return request({ url: '/supplier/reject-disposition/list', method: 'get', params })
 }

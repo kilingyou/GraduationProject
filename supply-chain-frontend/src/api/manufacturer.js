@@ -51,6 +51,11 @@ export function registerEcids(data) {
   return request({ url: '/manufacturer/production/ecid/register', method: 'post', data })
 }
 
+/** 放行给组装商：body 为 { batchId } 或 { ecids: string[] }，仅质检合格且已上链的部件会计数 */
+export function releasePartsToAssembler(data) {
+  return request({ url: '/manufacturer/production/ecid/release-to-assembler', method: 'post', data })
+}
+
 export function uploadQualityReport(data) {
   return request({ url: '/manufacturer/quality/report', method: 'post', data })
 }

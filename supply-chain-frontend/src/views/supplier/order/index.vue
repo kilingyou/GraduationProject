@@ -128,10 +128,37 @@
         <el-descriptions-item label="设计文档哈希">{{ detail.designDocHash || '-' }}</el-descriptions-item>
         <el-descriptions-item label="期望交期">{{ detail.expectedDelivery }}</el-descriptions-item>
         <el-descriptions-item label="目标制造商">{{ detail.targetManufacturerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="指定组装商" :span="2">
+          {{ detail.assemblyAssemblerName || '不限（任意已通过资质审核的组装商）' }}
+        </el-descriptions-item>
         <el-descriptions-item label="质量要求" :span="2">{{ detail.qualityRequirement }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ detail.createTime }}</el-descriptions-item>
         <el-descriptions-item label="更新时间">{{ detail.updateTime }}</el-descriptions-item>
       </el-descriptions>
+      <template #footer>
+        <div v-if="detail.status !== 'CANCELLED'" class="detail-footer">
+          <span class="footer-label">调整组装商限制</span>
+          <el-select
+            v-model="designateAssemblerId"
+            placeholder="不限"
+            clearable
+            filterable
+            style="width: 300px"
+            :loading="assemblerOptionsLoading"
+          >
+            <el-option
+              v-for="a in assemblerOptions"
+              :key="a.id"
+              :label="`${a.label} (#${a.id})`"
+              :value="a.id"
+            />
+          </el-select>
+          <el-button type="primary" :loading="designateSaving" @click="saveAssemblerDesignation">保存</el-button>
+        </div>
+        <div class="detail-footer-actions">
+          <el-button @click="detailDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -146,7 +173,9 @@ import {
   getProductionOrderList,
   getProductionOrderDetail,
   cancelProductionOrder,
-  listManufacturerOptions
+  listManufacturerOptions,
+  listAssemblerOptions,
+  designateAssemblyAssembler
 } from '@/api/supplier'
 import { getBomList } from '@/api/supplier'
 
@@ -172,6 +201,10 @@ const total = ref(0)
 const createDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const detail = ref({})
+const designateAssemblerId = ref(undefined)
+const assemblerOptions = ref([])
+const assemblerOptionsLoading = ref(false)
+const designateSaving = ref(false)
 const createFormRef = ref()
 const bomOptions = ref([])
 const manufacturerOptions = ref([])
@@ -278,9 +311,50 @@ async function handleView(row) {
   try {
     const res = await getProductionOrderDetail(row.id)
     detail.value = res.data || {}
+    designateAssemblerId.value =
+      detail.value.assemblyAssemblerId != null && detail.value.assemblyAssemblerId !== ''
+        ? detail.value.assemblyAssemblerId
+        : undefined
     detailDialogVisible.value = true
+    if (detail.value.status !== 'CANCELLED') {
+      loadAssemblerOptions()
+    }
   } catch {
     ElMessage.error('获取订单详情失败')
+  }
+}
+
+async function loadAssemblerOptions() {
+  assemblerOptionsLoading.value = true
+  try {
+    const res = await listAssemblerOptions()
+    assemblerOptions.value = res.data || []
+  } catch {
+    assemblerOptions.value = []
+  } finally {
+    assemblerOptionsLoading.value = false
+  }
+}
+
+async function saveAssemblerDesignation() {
+  if (!detail.value?.id) return
+  designateSaving.value = true
+  try {
+    await designateAssemblyAssembler(detail.value.id, {
+      assemblerUserId: designateAssemblerId.value ?? null
+    })
+    ElMessage.success('已更新组装商限制')
+    const res = await getProductionOrderDetail(detail.value.id)
+    detail.value = res.data || {}
+    designateAssemblerId.value =
+      detail.value.assemblyAssemblerId != null && detail.value.assemblyAssemblerId !== ''
+        ? detail.value.assemblyAssemblerId
+        : undefined
+    fetchList()
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    designateSaving.value = false
   }
 }
 
@@ -299,3 +373,21 @@ async function handleCancel(row) {
 
 onMounted(() => fetchList())
 </script>
+
+<style scoped>
+.detail-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.footer-label {
+  font-size: 14px;
+  color: #606266;
+}
+.detail-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+</style>

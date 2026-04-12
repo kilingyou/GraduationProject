@@ -24,4 +24,13 @@ public interface DeviceRecordService extends IService<DeviceRecord> {
     boolean registerOnChain(List<Long> ids);
 
     boolean registerOnChain(DeviceRegisterRequest request, Long manufacturerId);
+
+    /**
+     * 制造商确认部件已发运/可交由组装商领用：要求本厂、质检合格、已链上、未组装。
+     *
+     * @return 新置为已放行的条数（已为 1 的不重复计数）
+     */
+    int releasePartsToAssemblerByEcids(List<String> ecids, Long manufacturerId);
+
+    int releasePartsToAssemblerByBatch(String batchId, Long manufacturerId);
 }

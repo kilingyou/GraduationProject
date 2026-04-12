@@ -81,9 +81,17 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="220" align="center">
+            <el-table-column label="操作" width="300" align="center">
               <template #default="{ row }">
                 <el-button type="primary" link @click="goToEcidTab(row)">管理ECID</el-button>
+                <el-button
+                  type="warning"
+                  link
+                  :loading="releasingBatchId === row.batchId"
+                  @click="handleReleaseBatchToAssembler(row)"
+                >
+                  放行本批次
+                </el-button>
                 <el-button
                   v-if="row.status !== 'COMPLETED'"
                   type="success"
@@ -117,7 +125,7 @@
             :closable="false"
             show-icon
             class="batch-hint"
-            title="上链注册前须在「质检」页：上传报告（绑定报告哈希）并标记合格；本页生成 ECID 数量累计不得超过批次计划数。"
+            title="上链注册前须在「质检」页：上传报告（绑定报告哈希）并标记合格；本页生成 ECID 数量累计不得超过批次计划数。组装商领料前须在本页或批次列表对「已质检合格且已上链」的部件执行「放行给组装商」。"
           />
           <!-- Generate form -->
           <el-form :inline="true" :model="ecidGenForm" :rules="ecidGenRules" ref="ecidGenFormRef" class="inline-form">
@@ -173,6 +181,14 @@
               @click="handleExport"
             >
               导出选中
+            </el-button>
+            <el-button
+              type="warning"
+              :disabled="!selectedEcids.length"
+              :loading="releasingSelected"
+              @click="handleReleaseSelectedToAssembler"
+            >
+              放行给组装商 ({{ selectedEcids.length }})
             </el-button>
           </div>
 
@@ -250,7 +266,14 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120" align="center" fixed="right">
+            <el-table-column label="组装放行" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.releasedToAssembler === 1 ? 'success' : 'warning'" effect="plain" size="small">
+                  {{ row.releasedToAssembler === 1 ? '已放行' : '待放行' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="260" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button
                   v-if="row.chainRegistered !== 1"
@@ -302,7 +325,8 @@ import {
   generateEcids,
   getEcidList,
   getOrderBomItemsForProduction,
-  registerEcids
+  registerEcids,
+  releasePartsToAssembler
 } from '@/api/manufacturer'
 import { useUserStore } from '@/store/user'
 
@@ -433,6 +457,60 @@ async function handleBatchComplete(row) {
   }
 }
 
+async function handleReleaseBatchToAssembler(row) {
+  if (!row?.batchId) return
+  try {
+    await ElMessageBox.confirm(
+      '将本批次中「质检合格且已上链、尚未放行」的部件全部标记为已放行给组装商，组装商即可在系统中领料。',
+      '放行给组装商',
+      { type: 'warning' }
+    )
+    releasingBatchId.value = row.batchId
+    const { data } = await releasePartsToAssembler({ batchId: row.batchId })
+    const n = data?.released ?? 0
+    if (n === 0) {
+      ElMessage.warning('无可放行部件（需质检合格、已上链且尚未放行）')
+    } else {
+      ElMessage.success(`已放行 ${n} 条`)
+    }
+    fetchEcids()
+    fetchBatches()
+  } catch (e) {
+    if (e !== 'cancel') {
+      /* 拦截器 */
+    }
+  } finally {
+    releasingBatchId.value = ''
+  }
+}
+
+async function handleReleaseSelectedToAssembler() {
+  if (!selectedEcids.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `将选中的 ${selectedEcids.value.length} 条中符合条件的部件标记为已放行给组装商（须质检合格、已上链）。`,
+      '放行给组装商',
+      { type: 'warning' }
+    )
+    releasingSelected.value = true
+    const ecids = selectedEcids.value.map((r) => r.ecid).filter(Boolean)
+    const { data } = await releasePartsToAssembler({ ecids })
+    const n = data?.released ?? 0
+    if (n === 0) {
+      ElMessage.warning('无符合条件可放行的部件')
+    } else {
+      ElMessage.success(`已放行 ${n} 条`)
+    }
+    fetchEcids()
+  } catch (e) {
+    if (e !== 'cancel') {
+      /* 拦截器 */
+    }
+  } finally {
+    releasingSelected.value = false
+  }
+}
+
 // ================== ECID management ==================
 const ECID_STATUS = {
   PRODUCED: { label: '已生成', type: 'info' },
@@ -450,6 +528,8 @@ const ecidStatusType = (s) => ECID_STATUS[s]?.type ?? 'info'
 const ecidLoading = ref(false)
 const ecidGenerating = ref(false)
 const registering = ref(false)
+const releasingSelected = ref(false)
+const releasingBatchId = ref('')
 const ecidList = ref([])
 const ecidTotal = ref(0)
 const selectedEcids = ref([])

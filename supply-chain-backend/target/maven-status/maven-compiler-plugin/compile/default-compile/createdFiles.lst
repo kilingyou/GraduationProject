@@ -55,6 +55,7 @@ com\scm\module\manufacturer\service\ManufacturingAgreementService.class
 com\scm\module\supplier\mapper\BomItemMapper.class
 com\scm\common\BaseEntity.class
 com\scm\module\manufacturer\entity\DeviceRecord.class
+com\scm\module\supplier\controller\SupplierAssemblerOptionsController.class
 com\scm\module\system\entity\SysOperateLog.class
 com\scm\module\system\entity\SysUser.class
 com\scm\module\supplier\mapper\DesignDocumentMapper.class

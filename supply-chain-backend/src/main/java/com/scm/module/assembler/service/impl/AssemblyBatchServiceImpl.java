@@ -4,11 +4,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.scm.common.Constants;
+import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.module.assembler.entity.AssemblyBatch;
 import com.scm.module.assembler.mapper.AssemblyBatchMapper;
 import com.scm.module.assembler.service.AssemblyBatchService;
+import com.scm.module.supplier.entity.ProductionRequest;
+import com.scm.module.supplier.service.ProductionRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -25,9 +29,28 @@ public class AssemblyBatchServiceImpl
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.BASIC_ISO_DATE;
     private final BlockchainAnchorService blockchainAnchorService;
+    private final ProductionRequestService productionRequestService;
 
     @Override
     public AssemblyBatch createBatch(AssemblyBatch batch) {
+        if (!StringUtils.hasText(batch.getOrderId())) {
+            throw new BusinessException("请选择关联的生产订单");
+        }
+        String orderId = batch.getOrderId().trim();
+        ProductionRequest pr = productionRequestService.getOne(new LambdaQueryWrapper<ProductionRequest>()
+                .eq(ProductionRequest::getOrderId, orderId));
+        if (pr == null) {
+            throw new BusinessException("生产订单不存在: " + orderId);
+        }
+        if (Constants.CANCELLED.equals(pr.getStatus())) {
+            throw new BusinessException("订单已撤销，无法创建组装批次");
+        }
+        if (pr.getAssemblyAssemblerId() != null && batch.getAssemblerId() != null
+                && !pr.getAssemblyAssemblerId().equals(batch.getAssemblerId())) {
+            throw new BusinessException("本订单已指定其他组装商，当前账号无权为该订单建批次");
+        }
+        batch.setOrderId(orderId);
+
         if (!StringUtils.hasText(batch.getBatchNo())) {
             batch.setBatchNo("ASM-" + LocalDate.now().format(DATE_FMT) + "-"
                     + UUID.randomUUID().toString().substring(0, 8).toUpperCase());

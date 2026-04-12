@@ -3,6 +3,7 @@ package com.scm.module.assembler.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.scm.common.Constants;
 import com.scm.common.PageResult;
+import com.scm.common.exception.BusinessException;
 import com.scm.module.assembler.dto.AvailableAssemblyEcidItem;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
 import com.scm.module.assembler.entity.AssemblyRecord;
@@ -11,6 +12,10 @@ import com.scm.module.assembler.mapper.AssemblyRecordMapper;
 import com.scm.module.assembler.service.AssemblerIntakeService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.service.DeviceRecordService;
+import com.scm.module.supplier.entity.BomItem;
+import com.scm.module.supplier.entity.ProductionRequest;
+import com.scm.module.supplier.mapper.BomItemMapper;
+import com.scm.module.supplier.service.ProductionRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -18,6 +23,9 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,9 +35,11 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
     private final DeviceRecordService deviceRecordService;
     private final AssemblyRecordMapper assemblyRecordMapper;
     private final AssemblerIntakeQueryMapper assemblerIntakeQueryMapper;
+    private final ProductionRequestService productionRequestService;
+    private final BomItemMapper bomItemMapper;
 
     @Override
-    public IntakeVerifyResult verifyEcid(String ecid) {
+    public IntakeVerifyResult verifyEcidForAssembly(String ecid, Long assemblerUserId) {
         IntakeVerifyResult r = new IntakeVerifyResult();
         r.setEcid(ecid);
         if (!StringUtils.hasText(ecid)) {
@@ -53,6 +63,17 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
                     .setChainRegistered(device.getChainRegistered());
         }
 
+        ProductionRequest order = productionRequestService.getOne(
+                new LambdaQueryWrapper<ProductionRequest>()
+                        .eq(ProductionRequest::getOrderId, device.getOrderId()));
+        if (order != null && order.getAssemblyAssemblerId() != null) {
+            if (assemblerUserId == null || !order.getAssemblyAssemblerId().equals(assemblerUserId)) {
+                return r.setStatus(IntakeVerifyResult.REJECT)
+                        .setMessage("本生产订单已指定组装商，当前账号无权领用该部件")
+                        .setDeviceType(device.getDeviceType());
+            }
+        }
+
         if (Constants.REJECTED.equals(device.getStatus()) || Constants.QC_FAILED.equals(device.getStatus())) {
             return r.setStatus(IntakeVerifyResult.REJECT)
                     .setMessage("该部件已质检不合格并作废，禁止进入组装")
@@ -69,16 +90,32 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
                     .setDeviceType(device.getDeviceType())
                     .setManufacturerBatchId(device.getBatchId());
         }
+        if (device.getReleasedToAssembler() == null || device.getReleasedToAssembler() != 1) {
+            return r.setStatus(IntakeVerifyResult.REJECT)
+                    .setMessage("制造商尚未将部件放行给组装商，请待发运/放行后再领用")
+                    .setDeviceType(device.getDeviceType())
+                    .setManufacturerBatchId(device.getBatchId())
+                    .setOrderId(device.getOrderId());
+        }
 
-        return r.setStatus(IntakeVerifyResult.PASS)
+        r.setStatus(IntakeVerifyResult.PASS)
                 .setMessage("验证通过，可用于组装")
                 .setDeviceType(device.getDeviceType())
                 .setManufacturerBatchId(device.getBatchId())
-                .setChainRegistered(device.getChainRegistered());
+                .setChainRegistered(device.getChainRegistered())
+                .setOrderId(device.getOrderId())
+                .setBomItemId(device.getBomItemId());
+        if (device.getBomItemId() != null) {
+            BomItem bi = bomItemMapper.selectById(device.getBomItemId());
+            if (bi != null) {
+                r.setBomPartSummary(summarizeBomItem(bi));
+            }
+        }
+        return r;
     }
 
     @Override
-    public List<IntakeVerifyResult> verifyEcids(List<String> ecids) {
+    public List<IntakeVerifyResult> verifyEcidsForAssembly(List<String> ecids, Long assemblerUserId) {
         if (ecids == null || ecids.isEmpty()) {
             return new ArrayList<>();
         }
@@ -89,17 +126,22 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
                 .collect(Collectors.toList());
         List<IntakeVerifyResult> out = new ArrayList<>(distinct.size());
         for (String e : distinct) {
-            out.add(verifyEcid(e));
+            out.add(verifyEcidForAssembly(e, assemblerUserId));
         }
         return out;
     }
 
     @Override
-    public PageResult<AvailableAssemblyEcidItem> pageAvailableEcidsForAssembly(String keyword, int pageNum, int pageSize) {
+    public PageResult<AvailableAssemblyEcidItem> pageAvailableEcidsForAssembly(
+            String keyword, int pageNum, int pageSize, Long assemblerUserId, String orderId) {
+        if (assemblerUserId == null) {
+            throw new BusinessException("缺少组装商身份");
+        }
         String kw = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        String oid = StringUtils.hasText(orderId) ? orderId.trim() : null;
         int pn = Math.max(1, pageNum);
         int ps = Math.min(200, Math.max(1, pageSize));
-        long total = assemblerIntakeQueryMapper.countAvailableForAssembly(Constants.QC_PASS, kw);
+        long total = assemblerIntakeQueryMapper.countAvailableForAssembly(Constants.QC_PASS, kw, assemblerUserId, oid);
         if (total == 0) {
             return new PageResult<AvailableAssemblyEcidItem>()
                     .setRecords(Collections.emptyList())
@@ -109,11 +151,45 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
         }
         long offset = (long) (pn - 1) * ps;
         List<AvailableAssemblyEcidItem> records = assemblerIntakeQueryMapper.listAvailableForAssembly(
-                Constants.QC_PASS, kw, offset, ps);
+                Constants.QC_PASS, kw, assemblerUserId, oid, offset, ps);
+        fillBomPartSummaries(records);
         return new PageResult<AvailableAssemblyEcidItem>()
                 .setRecords(records)
                 .setTotal(total)
                 .setCurrent(pn)
                 .setSize(ps);
+    }
+
+    private void fillBomPartSummaries(List<AvailableAssemblyEcidItem> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        Set<Long> ids = rows.stream()
+                .map(AvailableAssemblyEcidItem::getBomItemId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        List<BomItem> items = bomItemMapper.selectBatchIds(ids);
+        Map<Long, BomItem> byId = items.stream().collect(Collectors.toMap(BomItem::getId, x -> x, (a, b) -> a));
+        for (AvailableAssemblyEcidItem row : rows) {
+            if (row.getBomItemId() == null) {
+                continue;
+            }
+            BomItem it = byId.get(row.getBomItemId());
+            if (it != null) {
+                row.setBomPartSummary(summarizeBomItem(it));
+            }
+        }
+    }
+
+    private static String summarizeBomItem(BomItem it) {
+        String num = it.getPartNumber() != null ? it.getPartNumber().trim() : "";
+        String name = it.getPartName() != null ? it.getPartName().trim() : "";
+        if (StringUtils.hasText(num) && StringUtils.hasText(name)) {
+            return num + " / " + name;
+        }
+        return StringUtils.hasText(num) ? num : name;
     }
 }

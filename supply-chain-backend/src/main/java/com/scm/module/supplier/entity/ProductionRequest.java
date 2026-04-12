@@ -33,6 +33,9 @@ public class ProductionRequest {
 
     private Long targetManufacturer;
 
+    /** 指定组装商；NULL 表示任意组装商可领用该单下已放行部件 */
+    private Long assemblyAssemblerId;
+
     private String status;
 
     private String txHash;

@@ -178,13 +178,15 @@ CREATE TABLE bus_production_request (
     expected_delivery   DATE         COMMENT '期望交期',
     quality_requirement TEXT         COMMENT '质量要求',
     target_manufacturer BIGINT       COMMENT '定向制造商ID(NULL为广播)',
+    assembly_assembler_id BIGINT     NULL COMMENT '指定组装商用户ID(NULL不限制)',
     status              VARCHAR(30)  NOT NULL DEFAULT 'PENDING_ACCEPTANCE' COMMENT '订单状态',
     tx_hash             VARCHAR(128),
     create_time         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_status (status),
-    INDEX idx_target_manufacturer (target_manufacturer)
+    INDEX idx_target_manufacturer (target_manufacturer),
+    INDEX idx_pr_assembly_assembler (assembly_assembler_id)
 ) COMMENT '生产订单表';
 
 -- ============================================================
@@ -241,11 +243,13 @@ CREATE TABLE bus_device_record (
     test_report_cid   VARCHAR(200) COMMENT '测试报告IPFS CID',
     tx_hash           VARCHAR(128) COMMENT '注册上链交易哈希',
     chain_registered  TINYINT      DEFAULT 0 COMMENT '是否已上链注册',
+    released_to_assembler TINYINT NOT NULL DEFAULT 0 COMMENT '制造商已放行给组装商(1)后方可领用',
     create_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_batch_id (batch_id),
     INDEX idx_manufacturer_id (manufacturer_id),
     INDEX idx_status (status),
+    INDEX idx_device_released (released_to_assembler),
     INDEX idx_device_order_bom_item (order_id, bom_item_id)
 ) COMMENT '设备记录表(ECID)';
 
@@ -297,6 +301,7 @@ CREATE TABLE bus_assembly_batch (
     id            BIGINT PRIMARY KEY AUTO_INCREMENT,
     batch_no      VARCHAR(64)  NOT NULL UNIQUE COMMENT '组装批次号',
     assembler_id  BIGINT       NOT NULL,
+    order_id      VARCHAR(64)  NULL COMMENT '关联生产订单业务号',
     product_model VARCHAR(200) COMMENT '产品型号',
     planned_qty   INT,
     completed_qty INT          DEFAULT 0,
@@ -304,7 +309,8 @@ CREATE TABLE bus_assembly_batch (
     tx_hash       VARCHAR(128) COMMENT '上链交易哈希',
     create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_assembler_id (assembler_id)
+    INDEX idx_assembler_id (assembler_id),
+    INDEX idx_assembly_batch_order (order_id)
 ) COMMENT '组装批次表';
 
 -- 组装记录表 (整机SN - ECID映射)

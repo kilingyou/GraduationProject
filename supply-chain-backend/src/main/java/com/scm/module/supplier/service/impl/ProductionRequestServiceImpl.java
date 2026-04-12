@@ -27,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -134,6 +136,38 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
                 .eq(ProductionRequest::getId, orderDbId)
                 .set(ProductionRequest::getStatus, Constants.CANCELLED));
         log.info("Production order cancelled by supplier: id={}, orderId={}", orderDbId, order.getOrderId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void designateAssemblyAssembler(Long orderDbId, Long supplierId, Long assemblyAssemblerUserId) {
+        ProductionRequest order = getById(orderDbId);
+        if (order == null || !supplierId.equals(order.getSupplierId())) {
+            throw new BusinessException("订单不存在");
+        }
+        if (assemblyAssemblerUserId != null) {
+            SysUser u = sysUserMapper.selectById(assemblyAssemblerUserId);
+            if (u == null) {
+                throw new BusinessException("组装商用户不存在");
+            }
+        }
+        update(new LambdaUpdateWrapper<ProductionRequest>()
+                .eq(ProductionRequest::getId, orderDbId)
+                .eq(ProductionRequest::getSupplierId, supplierId)
+                .set(ProductionRequest::getAssemblyAssemblerId, assemblyAssemblerUserId));
+    }
+
+    @Override
+    public List<ProductionRequest> listAssemblyEligibleOrders(Long assemblerUserId) {
+        if (assemblerUserId == null) {
+            return Collections.emptyList();
+        }
+        return list(new LambdaQueryWrapper<ProductionRequest>()
+                .ne(ProductionRequest::getStatus, Constants.CANCELLED)
+                .and(w -> w.isNull(ProductionRequest::getAssemblyAssemblerId)
+                        .or()
+                        .eq(ProductionRequest::getAssemblyAssemblerId, assemblerUserId))
+                .orderByDesc(ProductionRequest::getCreateTime));
     }
 
     private void ensureTargetManufacturerChainReady(Long targetManufacturerUserId) {

@@ -1,6 +1,7 @@
 package com.scm.module.manufacturer.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -134,7 +135,8 @@ public class DeviceRecordServiceImpl
                     .setDeviceType(resolvedDeviceType)
                     .setManufactureTime(now)
                     .setStatus("PRODUCED")
-                    .setChainRegistered(0);
+                    .setChainRegistered(0)
+                    .setReleasedToAssembler(0);
             records.add(record);
         }
         //持久化设备记录列表
@@ -312,5 +314,67 @@ public class DeviceRecordServiceImpl
             }
         }
         return registerOnChain(ids);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int releasePartsToAssemblerByEcids(List<String> ecids, Long manufacturerId) {
+        if (ecids == null || ecids.isEmpty()) {
+            return 0;
+        }
+        int n = 0;
+        for (String raw : ecids) {
+            if (!StringUtils.hasText(raw)) {
+                continue;
+            }
+            DeviceRecord d = getOne(new LambdaQueryWrapper<DeviceRecord>()
+                    .eq(DeviceRecord::getEcid, raw.trim()));
+            if (!canReleaseToAssembler(d, manufacturerId)) {
+                continue;
+            }
+            update(new LambdaUpdateWrapper<DeviceRecord>()
+                    .eq(DeviceRecord::getId, d.getId())
+                    .set(DeviceRecord::getReleasedToAssembler, 1));
+            n++;
+        }
+        return n;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int releasePartsToAssemblerByBatch(String batchId, Long manufacturerId) {
+        if (!StringUtils.hasText(batchId)) {
+            return 0;
+        }
+        List<DeviceRecord> rows = list(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getBatchId, batchId.trim())
+                .eq(DeviceRecord::getManufacturerId, manufacturerId));
+        int n = 0;
+        for (DeviceRecord d : rows) {
+            if (!canReleaseToAssembler(d, manufacturerId)) {
+                continue;
+            }
+            update(new LambdaUpdateWrapper<DeviceRecord>()
+                    .eq(DeviceRecord::getId, d.getId())
+                    .set(DeviceRecord::getReleasedToAssembler, 1));
+            n++;
+        }
+        return n;
+    }
+
+    private static boolean canReleaseToAssembler(DeviceRecord d, Long manufacturerId) {
+        if (d == null || manufacturerId == null || !manufacturerId.equals(d.getManufacturerId())) {
+            return false;
+        }
+        if (!Constants.QC_PASS.equals(d.getStatus())) {
+            return false;
+        }
+        if (d.getChainRegistered() == null || d.getChainRegistered() != 1) {
+            return false;
+        }
+        if (Constants.ASSEMBLED.equals(d.getStatus())) {
+            return false;
+        }
+        return d.getReleasedToAssembler() == null || d.getReleasedToAssembler() != 1;
     }
 }

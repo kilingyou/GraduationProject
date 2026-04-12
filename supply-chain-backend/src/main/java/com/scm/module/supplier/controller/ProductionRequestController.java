@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/supplier/order")
 @RequiredArgsConstructor
@@ -68,6 +70,33 @@ public class ProductionRequestController {
     public Result<Void> cancel(@PathVariable Long id) {
         LoginUser loginUser = getCurrentUser();
         productionRequestService.cancelOrderBySupplier(id, loginUser.getUserId());
+        return Result.ok();
+    }
+
+    /**
+     * 指定组装商领用本单下已放行部件；body 可选 {@code assemblerUserId}，不传或 null 表示清除限制。
+     */
+    @PostMapping("/{id}/designate-assembler")
+    public Result<Void> designateAssembler(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        LoginUser loginUser = getCurrentUser();
+        supplierAuditGuardService.ensureApproved(loginUser.getUserId());
+        Long assemblerUserId = null;
+        if (body != null && body.get("assemblerUserId") != null) {
+            Object raw = body.get("assemblerUserId");
+            if (raw instanceof Number) {
+                assemblerUserId = ((Number) raw).longValue();
+            } else {
+                String s = String.valueOf(raw).trim();
+                if (!s.isEmpty()) {
+                    try {
+                        assemblerUserId = Long.parseLong(s);
+                    } catch (NumberFormatException ignored) {
+                        return Result.fail("assemblerUserId 格式无效");
+                    }
+                }
+            }
+        }
+        productionRequestService.designateAssemblyAssembler(id, loginUser.getUserId(), assemblerUserId);
         return Result.ok();
     }
 

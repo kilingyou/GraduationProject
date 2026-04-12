@@ -8,12 +8,13 @@ import java.util.List;
 
 public interface AssemblerIntakeService {
 
-    IntakeVerifyResult verifyEcid(String ecid);
-
-    List<IntakeVerifyResult> verifyEcids(List<String> ecids);
-
     /**
-     * 分页列出满足入库/组装校验通过条件的 ECID（与 {@link #verifyEcid} 规则一致）。
+     * @param assemblerUserId 当前组装商用户 ID；为 null 时不校验「订单指定组装商」策略（仅内部调用慎用）
      */
-    PageResult<AvailableAssemblyEcidItem> pageAvailableEcidsForAssembly(String keyword, int pageNum, int pageSize);
+    IntakeVerifyResult verifyEcidForAssembly(String ecid, Long assemblerUserId);
+
+    List<IntakeVerifyResult> verifyEcidsForAssembly(List<String> ecids, Long assemblerUserId);
+
+    PageResult<AvailableAssemblyEcidItem> pageAvailableEcidsForAssembly(
+            String keyword, int pageNum, int pageSize, Long assemblerUserId, String orderId);
 }

@@ -7,8 +7,10 @@ import com.scm.module.assembler.dto.AvailableAssemblyEcidItem;
 import com.scm.module.assembler.dto.EcidImportRow;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
 import com.scm.module.assembler.service.AssemblerIntakeService;
+import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,7 +29,8 @@ public class IntakeController {
     @PostMapping("/scan")
     public Result<IntakeVerifyResult> scan(@RequestBody Map<String, String> body) {
         String ecid = body.get("ecid");
-        return Result.ok(assemblerIntakeService.verifyEcid(ecid));
+        LoginUser user = currentUser();
+        return Result.ok(assemblerIntakeService.verifyEcidForAssembly(ecid, user.getUserId()));
     }
 
     /**
@@ -36,9 +39,12 @@ public class IntakeController {
     @GetMapping("/available-ecids")
     public Result<PageResult<AvailableAssemblyEcidItem>> availableEcids(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String orderId,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "50") int pageSize) {
-        return Result.ok(assemblerIntakeService.pageAvailableEcidsForAssembly(keyword, pageNum, pageSize));
+        LoginUser user = currentUser();
+        return Result.ok(assemblerIntakeService.pageAvailableEcidsForAssembly(
+                keyword, pageNum, pageSize, user.getUserId(), orderId));
     }
 
     /**
@@ -50,7 +56,8 @@ public class IntakeController {
         if (ecids == null || ecids.isEmpty()) {
             return Result.fail("请提供 ecids 列表");
         }
-        return Result.ok(assemblerIntakeService.verifyEcids(ecids));
+        LoginUser user = currentUser();
+        return Result.ok(assemblerIntakeService.verifyEcidsForAssembly(ecids, user.getUserId()));
     }
 
     /**
@@ -71,7 +78,8 @@ public class IntakeController {
         if (ecids.isEmpty()) {
             return Result.fail("未解析到 ECID，请使用表头为「ECID」的列或检查模板");
         }
-        return Result.ok(assemblerIntakeService.verifyEcids(ecids));
+        LoginUser user = currentUser();
+        return Result.ok(assemblerIntakeService.verifyEcidsForAssembly(ecids, user.getUserId()));
     }
 
     /**
@@ -104,7 +112,8 @@ public class IntakeController {
         if (ecids == null || ecids.isEmpty()) {
             return Result.fail("ECID list is required");
         }
-        return Result.ok(assemblerIntakeService.verifyEcids(ecids));
+        LoginUser user = currentUser();
+        return Result.ok(assemblerIntakeService.verifyEcidsForAssembly(ecids, user.getUserId()));
     }
 
     @GetMapping("/import-template")
@@ -116,5 +125,9 @@ public class IntakeController {
         EcidImportRow demo = new EcidImportRow();
         demo.setEcid("ECID-示例-请删除后粘贴真实数据");
         EasyExcel.write(response.getOutputStream(), EcidImportRow.class).sheet("ECID").doWrite(Collections.singletonList(demo));
+    }
+
+    private static LoginUser currentUser() {
+        return (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 }

@@ -45,6 +45,8 @@
             <el-descriptions :column="2" border size="small">
               <el-descriptions-item label="器件类型">{{ scanResult.deviceType || '-' }}</el-descriptions-item>
               <el-descriptions-item label="生产批次">{{ scanResult.manufacturerBatchId || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="生产订单">{{ scanResult.orderId || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="BOM 子件">{{ scanResult.bomPartSummary || '-' }}</el-descriptions-item>
               <el-descriptions-item label="说明" :span="2">{{ scanResult.message || '-' }}</el-descriptions-item>
               <el-descriptions-item label="部件链上">
                 <el-tag :type="scanResult.chainRegistered === 1 ? 'success' : 'info'" size="small">
@@ -100,7 +102,7 @@
         </el-button>
         <el-button style="margin-left: 8px" @click="handleDownloadTemplate">下载 Excel 模板</el-button>
         <template #tip>
-          <div class="el-upload__tip">上传后解析 ECID 列并逐条校验；模板首列为表头「ECID」</div>
+          <div class="el-upload__tip">上传后解析 ECID 列并逐条校验；模板首列为表头「ECID」。部件须制造商已放行给组装商且满足质检/上链条件方可通过。</div>
         </template>
       </el-upload>
 
@@ -113,6 +115,8 @@
         style="margin-top: 16px"
       >
         <el-table-column prop="ecid" label="ECID" min-width="200" />
+        <el-table-column prop="orderId" label="生产订单" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="bomPartSummary" label="BOM 子件" min-width="160" show-overflow-tooltip />
         <el-table-column prop="deviceType" label="器件类型" width="140" />
         <el-table-column prop="status" label="验证状态" width="120" align="center">
           <template #default="{ row }">

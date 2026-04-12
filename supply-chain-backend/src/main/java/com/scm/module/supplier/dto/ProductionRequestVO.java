@@ -19,4 +19,7 @@ public class ProductionRequestVO extends ProductionRequest {
 
     /** 定向制造商企业名或登录名（无则空） */
     private String targetManufacturerName;
+
+    /** 指定组装商企业名或登录名（无则空） */
+    private String assemblyAssemblerName;
 }

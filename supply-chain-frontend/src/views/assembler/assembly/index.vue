@@ -5,6 +5,23 @@
       <el-tab-pane label="组装批次" name="batch">
         <el-card shadow="never" class="mb-16">
           <el-form :model="batchForm" :rules="batchRules" ref="batchFormRef" inline>
+            <el-form-item label="生产订单" prop="orderId">
+              <el-select
+                v-model="batchForm.orderId"
+                placeholder="选择要组装的订单"
+                filterable
+                clearable
+                style="width: 260px"
+                :loading="eligibleOrdersLoading"
+              >
+                <el-option
+                  v-for="o in eligibleOrders"
+                  :key="o.orderId"
+                  :label="`${o.orderId} (${orderStatusLabel(o.status)})`"
+                  :value="o.orderId"
+                />
+              </el-select>
+            </el-form-item>
             <el-form-item label="产品型号" prop="productModel">
               <el-input v-model="batchForm.productModel" placeholder="请输入产品型号" />
             </el-form-item>
@@ -19,8 +36,16 @@
           </el-form>
         </el-card>
 
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="mb-16"
+          title="组装批次须绑定生产订单；创建整机时请选用该批次对应订单下、且制造商已「放行给组装商」的 ECID。"
+        />
         <el-table :data="batchList" v-loading="batchLoading" border stripe>
           <el-table-column prop="batchNo" label="批次号" width="200" />
+          <el-table-column prop="orderId" label="生产订单" min-width="160" show-overflow-tooltip />
           <el-table-column prop="productModel" label="产品型号" width="160" />
           <el-table-column prop="plannedQty" label="计划数量" width="100" align="center" />
           <el-table-column prop="completedQty" label="已完成" width="100" align="center" />
@@ -82,7 +107,7 @@
                       v-for="b in batchList"
                       :key="b.batchNo"
                       :disabled="!isBatchOpenForAssembly(b)"
-                      :label="`${b.batchNo} (${b.productModel})${!isBatchOpenForAssembly(b) ? ' — 已满或未开放' : ''}`"
+                      :label="batchOptionLabel(b)"
                       :value="b.batchNo"
                     />
                   </el-select>
@@ -214,13 +239,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   createAssemblyBatch, getAssemblyBatchList,
   createAssemblyRecord, getAssemblyRecordList,
   registerAssemblyOnChain,
   getAvailableIntakeEcids,
+  getEligibleAssemblyOrders,
   exportAssemblySnShipFormat
 } from '@/api/assembler'
 import { useUserStore } from '@/store/user'
@@ -229,15 +255,41 @@ const activeTab = ref('batch')
 
 // ---- Batch ----
 const batchFormRef = ref()
-const batchForm = reactive({ productModel: '', plannedQty: 1 })
+const batchForm = reactive({ orderId: '', productModel: '', plannedQty: 1 })
 const batchRules = {
+  orderId: [{ required: true, message: '请选择生产订单', trigger: 'change' }],
   productModel: [{ required: true, message: '请输入产品型号', trigger: 'blur' }],
   plannedQty: [{ required: true, message: '请输入计划数量', trigger: 'change' }]
 }
+const eligibleOrders = ref([])
+const eligibleOrdersLoading = ref(false)
 const batchSubmitting = ref(false)
 const batchLoading = ref(false)
 const batchList = ref([])
 const batchPage = reactive({ pageNum: 1, pageSize: 10, total: 0 })
+
+async function loadEligibleOrders() {
+  eligibleOrdersLoading.value = true
+  try {
+    const res = await getEligibleAssemblyOrders()
+    eligibleOrders.value = res.data || []
+  } catch {
+    eligibleOrders.value = []
+  } finally {
+    eligibleOrdersLoading.value = false
+  }
+}
+
+function orderStatusLabel(s) {
+  const m = {
+    PENDING_ACCEPTANCE: '待接单',
+    ACCEPTED: '已接单',
+    IN_PRODUCTION: '生产中',
+    COMPLETED: '已完成',
+    CANCELLED: '已撤销'
+  }
+  return m[s] || s || '—'
+}
 
 async function loadBatches() {
   batchLoading.value = true
@@ -260,6 +312,8 @@ async function handleCreateBatch() {
     await createAssemblyBatch({ ...batchForm })
     ElMessage.success('创建批次成功')
     batchFormRef.value.resetFields()
+    batchForm.orderId = ''
+    batchForm.plannedQty = 1
     loadBatches()
   } catch (e) {
     ElMessage.error(e.message || '创建失败')
@@ -280,6 +334,18 @@ function isBatchOpenForAssembly(b) {
   if (plan != null && done >= plan) return false
   return true
 }
+
+function batchOptionLabel(b) {
+  if (!b) return ''
+  const ord = b.orderId ? ` · ${b.orderId}` : ''
+  const suffix = !isBatchOpenForAssembly(b) ? ' — 已满或未开放' : ''
+  return `${b.batchNo} (${b.productModel || '—'})${ord}${suffix}`
+}
+
+const assemblyBatchOrderId = computed(() => {
+  const b = batchList.value.find(x => x.batchNo === recordForm.batchNo)
+  return b?.orderId || ''
+})
 
 // ---- Records ----
 const recordFormRef = ref()
@@ -312,11 +378,15 @@ function ecidOptionLabel(item) {
 async function remoteSearchEcids(query) {
   ecidOptionsLoading.value = true
   try {
-    const res = await getAvailableIntakeEcids({
+    const params = {
       keyword: (query || '').trim(),
       pageNum: 1,
       pageSize: 100
-    })
+    }
+    if (assemblyBatchOrderId.value) {
+      params.orderId = assemblyBatchOrderId.value
+    }
+    const res = await getAvailableIntakeEcids(params)
     ecidOptions.value = res.data?.records || []
   } catch {
     ecidOptions.value = []
@@ -496,7 +566,18 @@ watch(activeTab, (name) => {
   }
 })
 
+watch(
+  () => recordForm.batchNo,
+  () => {
+    ecidOptionsPrimed = false
+    if (activeTab.value === 'record') {
+      remoteSearchEcids('')
+    }
+  }
+)
+
 onMounted(() => {
+  loadEligibleOrders()
   loadBatches()
   loadRecords()
 })

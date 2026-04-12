@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter-assembler-order-release.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter-assembly-assembler-scope.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter-bom-item-ecid.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter_assembly_current_holder.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/supply-chain-backend/src/main/resources/db/alter_sales_privacy_segment.sql" dialect="MySQL" />

@@ -22,6 +22,10 @@ import com.scm.module.assembler.service.AssemblyBatchService;
 import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.service.DeviceRecordService;
+import com.scm.module.supplier.entity.BomItem;
+import com.scm.module.supplier.entity.ProductionRequest;
+import com.scm.module.supplier.mapper.BomItemMapper;
+import com.scm.module.supplier.service.ProductionRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,8 +34,10 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -49,6 +55,8 @@ public class AssemblyRecordServiceImpl
     private final AssemblyBatchService assemblyBatchService;
     private final AssemblerIntakeService assemblerIntakeService;
     private final DeviceRecordService deviceRecordService;
+    private final ProductionRequestService productionRequestService;
+    private final BomItemMapper bomItemMapper;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -103,9 +111,17 @@ public class AssemblyRecordServiceImpl
             throw new BusinessException("ECID 列表存在重复");
         }
         for (String ecid : ecids) {
-            IntakeVerifyResult v = assemblerIntakeService.verifyEcid(ecid);
+            IntakeVerifyResult v = assemblerIntakeService.verifyEcidForAssembly(ecid, assemblerId);
             if (!IntakeVerifyResult.PASS.equals(v.getStatus())) {
                 throw new BusinessException("ECID 校验未通过: " + ecid + " — " + v.getMessage());
+            }
+        }
+        validateSameOrderBomKit(ecids);
+        if (StringUtils.hasText(batch.getOrderId())) {
+            DeviceRecord probe = deviceRecordService.getOne(new LambdaQueryWrapper<DeviceRecord>()
+                    .eq(DeviceRecord::getEcid, ecids.get(0)));
+            if (probe == null || !batch.getOrderId().equals(probe.getOrderId())) {
+                throw new BusinessException("所选部件须属于本组装批次绑定的生产订单");
             }
         }
 
@@ -247,5 +263,62 @@ public class AssemblyRecordServiceImpl
             }
         }
         throw new BusinessException("自动生成 SN 失败，请指定自定义 SN");
+    }
+
+    /**
+     * 同一生产订单下的部件方可组装为整机；若订单绑定 BOM，则所选 ECID 须恰好构成一套子件（各 BOM 行数量与明细一致）。
+     */
+    private void validateSameOrderBomKit(List<String> ecids) {
+        List<DeviceRecord> devices = deviceRecordService.list(new LambdaQueryWrapper<DeviceRecord>()
+                .in(DeviceRecord::getEcid, ecids));
+        if (devices.size() != ecids.size()) {
+            throw new BusinessException("部分 ECID 未找到设备记录");
+        }
+        String orderId = devices.get(0).getOrderId();
+        if (!StringUtils.hasText(orderId)) {
+            throw new BusinessException("部件缺少所属订单，无法组装");
+        }
+        for (DeviceRecord d : devices) {
+            if (!orderId.equals(d.getOrderId())) {
+                throw new BusinessException("参与组装的部件须属于同一生产订单");
+            }
+        }
+        ProductionRequest pr = productionRequestService.getOne(new LambdaQueryWrapper<ProductionRequest>()
+                .eq(ProductionRequest::getOrderId, orderId));
+        if (pr == null) {
+            throw new BusinessException("未找到生产订单: " + orderId);
+        }
+        if (pr.getBomId() == null) {
+            return;
+        }
+        List<BomItem> bomItems = bomItemMapper.selectList(new LambdaQueryWrapper<BomItem>()
+                .eq(BomItem::getBomId, pr.getBomId()));
+        if (bomItems == null || bomItems.isEmpty()) {
+            return;
+        }
+        Map<Long, Integer> required = new HashMap<>();
+        for (BomItem bi : bomItems) {
+            int q = bi.getQuantity() == null || bi.getQuantity() < 1 ? 1 : bi.getQuantity();
+            required.put(bi.getId(), q);
+        }
+        Map<Long, Integer> actual = new HashMap<>();
+        for (DeviceRecord d : devices) {
+            if (d.getBomItemId() == null) {
+                throw new BusinessException("订单含 BOM，部件须关联具体 BOM 行: " + d.getEcid());
+            }
+            actual.merge(d.getBomItemId(), 1, Integer::sum);
+        }
+        for (Long bid : actual.keySet()) {
+            if (!required.containsKey(bid)) {
+                throw new BusinessException("存在不属于该订单 BOM 的部件 (bomItemId=" + bid + ")");
+            }
+        }
+        for (Map.Entry<Long, Integer> e : required.entrySet()) {
+            int got = actual.getOrDefault(e.getKey(), 0);
+            if (got != e.getValue()) {
+                throw new BusinessException("BOM 套件数量不匹配: bomItemId=" + e.getKey()
+                        + " 需要 " + e.getValue() + " 件，实际 " + got + " 件");
+            }
+        }
     }
 }

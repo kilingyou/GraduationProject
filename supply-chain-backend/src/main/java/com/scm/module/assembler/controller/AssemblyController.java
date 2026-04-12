@@ -12,6 +12,8 @@ import com.scm.module.assembler.entity.AssemblyRecord;
 import com.scm.module.assembler.service.AssemblyBatchService;
 import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.module.distributor.dto.SnImportRow;
+import com.scm.module.supplier.entity.ProductionRequest;
+import com.scm.module.supplier.service.ProductionRequestService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +36,7 @@ public class AssemblyController {
 
     private final AssemblyBatchService assemblyBatchService;
     private final AssemblyRecordService assemblyRecordService;
+    private final ProductionRequestService productionRequestService;
 
     @PostMapping("/batch")
     public Result<AssemblyBatch> createBatch(@RequestBody AssemblyBatch batch) {
@@ -41,6 +44,15 @@ public class AssemblyController {
         batch.setAssemblerId(loginUser.getUserId());
         AssemblyBatch created = assemblyBatchService.createBatch(batch);
         return Result.ok(created);
+    }
+
+    /**
+     * 创建组装批次时可选的「未撤销且本账号有权组装」的生产订单。
+     */
+    @GetMapping("/batch/eligible-orders")
+    public Result<List<ProductionRequest>> listEligibleOrdersForAssemblyBatch() {
+        LoginUser loginUser = getCurrentUser();
+        return Result.ok(productionRequestService.listAssemblyEligibleOrders(loginUser.getUserId()));
     }
 
     @GetMapping("/batch/list")

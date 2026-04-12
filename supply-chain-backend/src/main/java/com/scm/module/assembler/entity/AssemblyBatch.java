@@ -18,6 +18,9 @@ public class AssemblyBatch {
 
     private Long assemblerId;
 
+    /** 关联生产订单业务号（与 bus_production_request.order_id 一致） */
+    private String orderId;
+
     private String productModel;
 
     private Integer plannedQty;
