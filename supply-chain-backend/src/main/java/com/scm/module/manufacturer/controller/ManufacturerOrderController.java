@@ -72,6 +72,7 @@ public class ManufacturerOrderController {
                 user.getUserId(), page, pageSize, keyword));
     }
 
+    //接收订单功能
     @PostMapping(value = "/{orderId}/accept", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<ManufacturingAgreement> acceptOrder(
             @PathVariable String orderId,
@@ -81,6 +82,7 @@ public class ManufacturerOrderController {
             throws java.io.IOException {
         LoginUser user = currentUser();
 
+        //根据订单号查询订单
         ProductionRequest order = productionRequestService.getOne(
                 new LambdaQueryWrapper<ProductionRequest>()
                         .eq(ProductionRequest::getOrderId, orderId));
@@ -95,16 +97,18 @@ public class ManufacturerOrderController {
             return Result.fail("该订单已定向给其他制造商");
         }
 
+        //更新订单状态为ACCEPTED
         productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
                 .eq(ProductionRequest::getOrderId, orderId)
                 .set(ProductionRequest::getStatus, Constants.ACCEPTED));
 
+        //创建ManufacturingAgreement对象，并赋值
         ManufacturingAgreement agreement = new ManufacturingAgreement();
         agreement.setOrderId(orderId);
         agreement.setManufacturerId(user.getUserId());
         agreement.setFinalPrice(finalPrice);
         agreement.setDeliveryDate(deliveryDate);
-
+        //通过anchor上链协议文件哈希
         String fileHashPart = "";
         if (agreementFile != null && !agreementFile.isEmpty()) {
             EvidenceStorageService.StoredEvidence ev = evidenceStorageService.store(
@@ -115,14 +119,17 @@ public class ManufacturerOrderController {
             agreement.setAgreementCid(ev.getIpfsCid());
             fileHashPart = ev.getFileHash();
         }
+        //payload=订单号 | 制造商用户 id | 价格 | 交期 | 文件哈希片段
         String payload = orderId + "|" + user.getUserId() + "|" + finalPrice + "|" + deliveryDate + "|" + fileHashPart;
+        //上链
         agreement.setTxHash(blockchainAnchorService.anchor("MANUFACTURING_AGREEMENT", HashUtil.sha256Hex(payload)));
+        //调用智能合约signManufacturingAgreement签署协议
         smartContractInvokeService.signManufacturingAgreement(orderId, agreement.getAgreementHash(), finalPrice.toPlainString(), deliveryDate);
-
+        //制造商链上地址备注
         if (StringUtils.hasText(user.getBlockchainAddr())) {
             agreement.setManufacturerSign("MANUFACTURER_ADDR:" + user.getBlockchainAddr());
         }
-
+        //持久化协议实体
         agreementService.signAgreement(agreement);
 
         return Result.ok(agreement);

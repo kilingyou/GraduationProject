@@ -47,8 +47,10 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
     @Transactional(rollbackFor = Exception.class)
     public Bom createBom(Bom bom, List<BomItem> items) {
         bom.setChainStatus("PENDING");
+        //向数据库中插入物料清单数据
         save(bom);
 
+        //插入详细物料数据
         if (items != null && !items.isEmpty()) {
             for (BomItem item : items) {
                 item.setBomId(bom.getId());

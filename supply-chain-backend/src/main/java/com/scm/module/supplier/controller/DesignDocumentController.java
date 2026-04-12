@@ -31,6 +31,7 @@ public class DesignDocumentController {
     private final SupplierAuditGuardService supplierAuditGuardService;
     private final IpfsStorageService ipfsStorageService;
 
+    //设计文档上传接口
     @PostMapping("/upload")
     public Result<DesignDocument> upload(@RequestParam("file") MultipartFile file,
                                          @RequestParam("docName") String docName,
@@ -38,8 +39,9 @@ public class DesignDocumentController {
                                          @RequestParam(value = "version", required = false) String version,
                                          @RequestParam(value = "updateNote", required = false) String updateNote) {
         LoginUser loginUser = getCurrentUser();
+        //校验是否资质审核通过
         supplierAuditGuardService.ensureApproved(loginUser.getUserId());
-
+        //设置设计文档信息
         DesignDocument doc = new DesignDocument()
                 .setSupplierId(loginUser.getUserId())
                 .setDocName(docName)
@@ -48,13 +50,13 @@ public class DesignDocumentController {
                 .setUpdateNote(updateNote)
                 .setFileName(file.getOriginalFilename())
                 .setFileSize(file.getSize());
-
         byte[] bytes;
         try {
             bytes = file.getBytes();
         } catch (IOException e) {
             return Result.fail("读取上传文件失败");
         }
+        //将设计文档上链，返回文件哈希、交易哈希、CID等
         DesignDocument saved = designDocumentService.upload(doc, bytes);
         return Result.ok(saved);
     }

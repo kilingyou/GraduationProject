@@ -28,6 +28,7 @@ public class DesignDocumentServiceImpl extends ServiceImpl<DesignDocumentMapper,
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DesignDocument upload(DesignDocument doc, byte[] fileBytes) {
+        //计算文件哈希，将文件存入ipfs返回CID，同时调用anchor方法将文件类型+文件哈希上链
         EvidenceStorageService.StoredEvidence ev = evidenceStorageService.store(
                 fileBytes, doc.getFileName(), "DESIGN_DOC");
         doc.setFileHash(ev.getFileHash());

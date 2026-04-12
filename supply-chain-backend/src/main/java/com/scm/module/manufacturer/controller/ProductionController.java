@@ -32,6 +32,7 @@ public class ProductionController {
     private final ProductionBatchService batchService;
     private final DeviceRecordService deviceRecordService;
 
+    //创建生产批次
     @PostMapping("/batch")
     public Result<ProductionBatch> createBatch(@RequestBody Map<String, Object> params) {
         LoginUser user = currentUser();

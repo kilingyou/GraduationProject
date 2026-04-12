@@ -71,7 +71,9 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         save(request);
 
         String anchorPayload = request.getOrderId() + "|" + request.getSupplierId();
+        //通用锚定上链“PRODUCTION_ORDER”+生产订单id和供应商账户id的哈希
         request.setTxHash(blockchainAnchorService.anchor("PRODUCTION_ORDER", HashUtil.sha256Hex(anchorPayload)));
+        //创建生产订单
         smartContractInvokeService.createProductionRequest(
                 request.getOrderId(),
                 request.getTargetManufacturer(),

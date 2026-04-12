@@ -51,6 +51,7 @@ public class AuditController {
         return Result.ok(audits);
     }
 
+    //供应商资质审核模块
     @PostMapping("/{id}/approve")
     public Result<SysSupplierAudit> approve(@PathVariable Long id) {
         LoginUser loginUser = getCurrentUser();
@@ -61,21 +62,26 @@ public class AuditController {
         if (!"PENDING".equalsIgnoreCase(audit.getAuditStatus())) {
             return Result.fail("Audit already processed: " + audit.getAuditStatus());
         }
-        // Supplier evidence is anchored only after regulator approval.
+        //监管机构将资质证书与营业执照上链哈希
         if (StringUtils.hasText(audit.getLicenseFileHash())) {
             blockchainAnchorService.anchor("SUPPLIER_LICENSE", audit.getLicenseFileHash());
         }
         if (StringUtils.hasText(audit.getCertFileHash())) {
             blockchainAnchorService.anchor("SUPPLIER_CERT", audit.getCertFileHash());
         }
+        //把用户 id + 两类文件哈希 拼成字符串，再 SHA-256 hex 作为载荷，以 SUPPLIER_AUDIT_SUBMIT 类型上链，相当于对「本次审核材料集合」做一个整体指纹锚定
         String submitPayload = audit.getUserId() + "|" + audit.getLicenseFileHash() + "|" + audit.getCertFileHash();
         blockchainAnchorService.anchor("SUPPLIER_AUDIT_SUBMIT", HashUtil.sha256Hex(submitPayload));
 
+        //修改供应商账号状态，设置审计人员编号和修改时间
         audit.setAuditStatus("APPROVED");
         audit.setAuditorId(loginUser.getUserId());
         audit.setAuditTime(LocalDateTime.now());
+        //对 审核 id | 用户 id | 企业名 做 SHA256，以 SUPPLIER_APPROVE 上链；返回的 交易哈希 写入 audit.txHash
         String apPayload = audit.getId() + "|" + audit.getUserId() + "|" + audit.getEnterpriseName();
         audit.setTxHash(blockchainAnchorService.anchor("SUPPLIER_APPROVE", HashUtil.sha256Hex(apPayload)));
+
+        //再锚一条 SUPPLIER_AUDIT_DIGEST：包含审核 id、用户 id、企业名、信用代码、两个文件哈希、以及状态 APPROVED，形成更完整的审核结论摘要上链
         String digestPayload = audit.getId() + "|"
                 + audit.getUserId() + "|"
                 + (audit.getEnterpriseName() != null ? audit.getEnterpriseName() : "") + "|"
@@ -83,6 +89,8 @@ public class AuditController {
                 + (audit.getLicenseFileHash() != null ? audit.getLicenseFileHash() : "") + "|"
                 + (audit.getCertFileHash() != null ? audit.getCertFileHash() : "") + "|APPROVED";
         blockchainAnchorService.anchor("SUPPLIER_AUDIT_DIGEST", HashUtil.sha256Hex(digestPayload));
+
+        //将区块链地址与角色id绑定上链
         contractRoleSyncService.syncUserRoleToChain(audit.getUserId());
         sysSupplierAuditMapper.updateById(audit);
         return Result.ok(audit);

@@ -140,6 +140,7 @@ public class ContractRoleSyncService {
             throw new IllegalStateException("FISCO not available for role sync");
         }
 
+        //将区块链地址与角色id绑定上链
         try {
             List<Object> params = new ArrayList<>();
             params.add(blockchainAddr);

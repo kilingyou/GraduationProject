@@ -22,12 +22,13 @@ public class ProductionRequestController {
     private final ProductionRequestViewService productionRequestViewService;
     private final SupplierAuditGuardService supplierAuditGuardService;
 
+    //发起生产订单
     @PostMapping
     public Result<ProductionRequest> create(@RequestBody ProductionRequest request) {
         LoginUser loginUser = getCurrentUser();
         supplierAuditGuardService.ensureApproved(loginUser.getUserId());
         request.setSupplierId(loginUser.getUserId());
-
+        //创建生产订单
         ProductionRequest created = productionRequestService.createOrder(request);
         return Result.ok(created);
     }

@@ -198,7 +198,12 @@ contract SupplyChainTraceability {
         uint256 deliveryTs
     ) public onlyRole(ROLE_MANUFACTURER) {
         require(_productionRequests[orderId].exists, "order missing");
-        require(_productionRequests[orderId].targetManufacturer == msg.sender, "not target manufacturer");
+        // targetManufacturer==0 表示订单大厅（未定向）；首次签署时绑定为 msg.sender
+        address target = _productionRequests[orderId].targetManufacturer;
+        require(target == address(0) || target == msg.sender, "not target manufacturer");
+        if (target == address(0)) {
+            _productionRequests[orderId].targetManufacturer = msg.sender;
+        }
         _agreements[orderId] = ManufacturingAgreement(
             true,
             orderId,

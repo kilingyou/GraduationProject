@@ -13,6 +13,7 @@ public class SupplierAuditGuardService {
 
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
 
+    //校验资质是否通过
     public void ensureApproved(Long supplierUserId) {
         SysSupplierAudit audit = sysSupplierAuditMapper.selectOne(
                 new LambdaQueryWrapper<SysSupplierAudit>()
@@ -20,7 +21,6 @@ public class SupplierAuditGuardService {
                         .orderByDesc(SysSupplierAudit::getCreateTime)
                         .last("LIMIT 1")
         );
-
         if (audit == null || !"APPROVED".equalsIgnoreCase(audit.getAuditStatus())) {
             throw new BusinessException("供应商资质待审核，审核通过后才可执行该操作");
         }

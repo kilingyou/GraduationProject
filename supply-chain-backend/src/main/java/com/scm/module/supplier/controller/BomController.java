@@ -37,10 +37,13 @@ public class BomController {
     @PostMapping
     public Result<Bom> create(@RequestBody Bom bom) {
         LoginUser loginUser = getCurrentUser();
+        //确认资质审核通过
         supplierAuditGuardService.ensureApproved(loginUser.getUserId());
+        //设置用户id
         bom.setSupplierId(loginUser.getUserId());
-
+        //物料列表
         List<BomItem> items = bom.getItems();
+        //
         Bom created = bomService.createBom(bom, items);
         return Result.ok(created);
     }

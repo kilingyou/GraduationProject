@@ -31,6 +31,7 @@ public class SmartContractInvokeService {
     private final ObjectProvider<FiscoBcosBlockchainAnchorService> fiscoProvider;
     private final SysUserMapper sysUserMapper;
 
+    //创建生产订单
     public void createProductionRequest(String orderId, Long targetManufacturerId, String bomHash, Integer quantity,
                                         String designDocHash, LocalDate expectedDelivery, String qualityReqHash) {
         List<Object> params = new ArrayList<>();
