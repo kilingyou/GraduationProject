@@ -36,7 +36,9 @@ public class ProductionController {
     @PostMapping("/batch")
     public Result<ProductionBatch> createBatch(@RequestBody Map<String, Object> params) {
         LoginUser user = currentUser();
+        //订单id
         String orderId = (String) params.get("orderId");
+        //计划制造数量
         Object q = params.get("qty");
         if (q == null) {
             q = params.get("plannedQty");
@@ -54,6 +56,7 @@ public class ProductionController {
         if (orderId == null || orderId.trim().isEmpty() || qty == null || qty <= 0) {
             return Result.fail("参数不完整（需 orderId 与 qty/plannedQty）");
         }
+        //将生产订单设为生产中，构造制造批次，构造批次上链
         ProductionBatch batch = batchService.createBatch(orderId.trim(), user.getUserId(), qty);
         return Result.ok(batch);
     }
@@ -83,6 +86,11 @@ public class ProductionController {
         return Result.ok(pr);
     }
 
+    /**
+     * 批量生产ECID
+     * @param params 批次id、数量、设备类型
+     * @return
+     */
     @PostMapping("/ecid/generate")
     public Result<List<String>> generateEcids(@RequestBody Map<String, Object> params) {
         LoginUser user = currentUser();
@@ -105,6 +113,7 @@ public class ProductionController {
             return Result.fail("参数不完整");
         }
         batchId = batchId.trim();
+        //批量生成ECID
         if (orderId == null || orderId.trim().isEmpty()) {
             return Result.ok(deviceRecordService.generateEcidsForBatch(batchId, user.getUserId(), qty, deviceType));
         }
@@ -127,6 +136,11 @@ public class ProductionController {
         return Result.ok(pr);
     }
 
+    /**
+     * 上链注册设备功能
+     * @param request 设备记录id列表
+     * @return
+     */
     @PostMapping("/ecid/register")
     public Result<Void> registerOnChain(@RequestBody DeviceRegisterRequest request) {
         LoginUser user = currentUser();
@@ -135,6 +149,7 @@ public class ProductionController {
                 && (request.getEcids() == null || request.getEcids().isEmpty()))) {
             return Result.fail("请提交 ids 或 ecids");
         }
+        //对设备记录调用anchor逐条上链
         boolean success = deviceRecordService.registerOnChain(request, user.getUserId());
         return success ? Result.ok() : Result.fail("上链注册失败");
     }

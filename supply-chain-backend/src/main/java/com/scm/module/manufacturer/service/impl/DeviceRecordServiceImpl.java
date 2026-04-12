@@ -41,6 +41,7 @@ public class DeviceRecordServiceImpl
     private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
 
+    //批量生产ECID
     @Override
     public List<String> generateEcids(String batchId, String orderId, Long manufacturerId, Integer qty, String deviceType) {
         String dateStr = LocalDate.now().format(DATE_FMT);
@@ -76,6 +77,7 @@ public class DeviceRecordServiceImpl
                     .setChainRegistered(0);
             records.add(record);
         }
+        //持久化设备记录列表
         saveBatch(records);
         productionBatchService.refreshCompletedQtyFromDevices(batchId);
         return ecids;
@@ -92,6 +94,7 @@ public class DeviceRecordServiceImpl
         }
     }
 
+    //批量生产ECID
     @Override
     public List<String> generateEcidsForBatch(String batchId, Long manufacturerId, Integer qty, String deviceType) {
         ProductionBatch batch = productionBatchService.getOne(
@@ -121,7 +124,9 @@ public class DeviceRecordServiceImpl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean registerOnChain(List<Long> ids) {
+        //查询设备记录列表
         List<DeviceRecord> records = listByIds(ids);
+        //如果设备记录状态为rejected则收集ECID并抛异常
         List<String> rejectedEcids = records.stream()
                 .filter(r -> Constants.REJECTED.equals(r.getStatus()))
                 .map(DeviceRecord::getEcid)
@@ -130,11 +135,14 @@ public class DeviceRecordServiceImpl
             throw new BusinessException(
                     "质检不合格的设备不能上链注册，请先处理或取消勾选：" + String.join("、", rejectedEcids));
         }
+        //逐条上链
         for (DeviceRecord record : records) {
+            //逐条上链
             String payload = record.getEcid() + "|" + record.getOrderId() + "|"
                     + record.getBatchId() + "|" + record.getManufacturerId();
             String txHash = blockchainAnchorService.anchor(
                     "DEVICE_REGISTER", HashUtil.sha256Hex(payload));
+            //上传常量QC_PASS
             smartContractInvokeService.registerDeviceRecord(
                     record.getEcid(),
                     record.getOrderId(),
@@ -143,12 +151,14 @@ public class DeviceRecordServiceImpl
                     record.getTestReportHash(),
                     Constants.QC_PASS
             );
+            //设置订单记录为已注册，并设置交易哈希
             record.setChainRegistered(1);
             record.setTxHash(txHash);
             if (!Constants.QC_PASS.equals(record.getStatus())) {
                 record.setStatus(Constants.QC_PASS);
             }
         }
+        //更新数据库记录
         boolean ok = updateBatchById(records);
         if (ok) {
             Map<String, Long> batchToManufacturer = new LinkedHashMap<>();
@@ -164,6 +174,7 @@ public class DeviceRecordServiceImpl
         return ok;
     }
 
+    //校验id
     @Override
     public boolean registerOnChain(DeviceRegisterRequest request, Long manufacturerId) {
         List<Long> ids = request.getIds();

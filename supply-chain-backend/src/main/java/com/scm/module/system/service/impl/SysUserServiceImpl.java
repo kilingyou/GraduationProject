@@ -103,10 +103,14 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         }
 
         if (StringUtils.hasText(roleKey)) {
-            SysRole role = sysRoleMapper.selectOne(
-                    new LambdaQueryWrapper<SysRole>().eq(SysRole::getRoleKey, roleKey));
+            SysRole role = sysRoleMapper.selectOne(new LambdaQueryWrapper<SysRole>()
+                    .eq(SysRole::getRoleKey, roleKey.trim().toLowerCase())
+                    .eq(SysRole::getStatus, 1)
+                    .last("LIMIT 1"));
             if (role != null) {
                 baseMapper.insertUserRole(user.getId(), role.getId());
+                // 与 assignRole 一致：注册后立即把角色写入合约 roleOf，否则 signManufacturingAgreement 等 onlyRole 会 revert
+                contractRoleSyncService.syncUserRoleToChain(user.getId());
             }
         }
     }

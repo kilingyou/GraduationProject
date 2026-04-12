@@ -51,6 +51,7 @@ public class ProductionBatchServiceImpl
     public ProductionBatch createBatch(String orderId, Long manufacturerId, Integer qty) {
         ProductionRequest order = productionRequestService.getOne(
                 new LambdaQueryWrapper<ProductionRequest>().eq(ProductionRequest::getOrderId, orderId));
+        //订单状态校验
         if (order == null) {
             throw new BusinessException("订单不存在");
         }
@@ -63,6 +64,7 @@ public class ProductionBatchServiceImpl
         if (!Constants.ACCEPTED.equals(order.getStatus()) && !Constants.IN_PRODUCTION.equals(order.getStatus())) {
             throw new BusinessException("订单须为已接单或生产中才可创建生产批次");
         }
+        //校验制造协议
         ManufacturingAgreement agreement = manufacturingAgreementService.getOne(
                 new LambdaQueryWrapper<ManufacturingAgreement>()
                         .eq(ManufacturingAgreement::getOrderId, orderId)
@@ -71,6 +73,7 @@ public class ProductionBatchServiceImpl
             throw new BusinessException("未找到本企业与该订单的制造协议");
         }
 
+        //更新订单状态为生产中
         Long existing = baseMapper.selectCount(new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getOrderId, orderId)
                 .eq(ProductionBatch::getManufacturerId, manufacturerId));
@@ -79,7 +82,7 @@ public class ProductionBatchServiceImpl
                     .eq(ProductionRequest::getOrderId, orderId)
                     .set(ProductionRequest::getStatus, Constants.IN_PRODUCTION));
         }
-
+        //构造批次
         String batchId = "BATCH-" + LocalDate.now().format(DATE_FMT) + "-"
                 + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         ProductionBatch batch = new ProductionBatch()
@@ -89,8 +92,10 @@ public class ProductionBatchServiceImpl
                 .setPlannedQty(qty)
                 .setCompletedQty(0)
                 .setStatus("CREATED");
+        //构造批次上链
         String payload = batchId + "|" + orderId + "|" + manufacturerId + "|" + qty;
         batch.setTxHash(blockchainAnchorService.anchor("PRODUCTION_BATCH_CREATE", HashUtil.sha256Hex(payload)));
+        //持久化构造批次
         save(batch);
         return batch;
     }
