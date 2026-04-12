@@ -18,7 +18,9 @@ import com.scm.module.supplier.service.BomService;
 import com.scm.module.supplier.service.DesignDocumentService;
 import com.scm.module.supplier.service.ProductionRequestService;
 import com.scm.module.system.entity.SysSupplierAudit;
+import com.scm.module.system.entity.SysUser;
 import com.scm.module.system.mapper.SysSupplierAuditMapper;
+import com.scm.module.system.mapper.SysUserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
     private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
+    private final SysUserMapper sysUserMapper;
     private final BomService bomService;
     private final DesignDocumentService designDocumentService;
 
@@ -66,9 +69,13 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
             }
         }
 
+        ensureTargetManufacturerChainReady(request.getTargetManufacturer());
+
         request.setOrderId(UUID.randomUUID().toString().replace("-", ""));
         request.setStatus("PENDING_ACCEPTANCE");
         save(request);
+
+        String qualityReqHash = hashQualityRequirementText(request.getQualityRequirement());
 
         String anchorPayload = request.getOrderId() + "|" + request.getSupplierId();
         //通用锚定上链“PRODUCTION_ORDER”+生产订单id和供应商账户id的哈希
@@ -81,8 +88,10 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
                 request.getQuantity(),
                 request.getDesignDocHash(),
                 request.getExpectedDelivery(),
-                request.getQualityRequirement()
+                qualityReqHash
         );
+        // 合约 create 默认 CREATED，与库中待接单语义对齐
+        smartContractInvokeService.updateProductionRequestStatus(request.getOrderId(), Constants.PENDING_ACCEPTANCE);
         updateById(request);
 
         log.info("Production order created: id={}, orderId={}", request.getId(), request.getOrderId());
@@ -120,9 +129,31 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         }
         String payload = order.getOrderId() + "|" + supplierId + "|CANCELLED";
         blockchainAnchorService.anchor("PRODUCTION_ORDER_CANCEL", HashUtil.sha256Hex(payload));
+        smartContractInvokeService.updateProductionRequestStatus(order.getOrderId(), Constants.CANCELLED);
         update(new LambdaUpdateWrapper<ProductionRequest>()
                 .eq(ProductionRequest::getId, orderDbId)
                 .set(ProductionRequest::getStatus, Constants.CANCELLED));
         log.info("Production order cancelled by supplier: id={}, orderId={}", orderDbId, order.getOrderId());
+    }
+
+    private void ensureTargetManufacturerChainReady(Long targetManufacturerUserId) {
+        if (targetManufacturerUserId == null) {
+            return;
+        }
+        SysUser user = sysUserMapper.selectById(targetManufacturerUserId);
+        if (user == null) {
+            throw new BusinessException("目标制造商不存在");
+        }
+        String addr = user.getBlockchainAddr();
+        if (!StringUtils.hasText(addr) || !addr.trim().matches("^0x[0-9a-fA-F]{40}$")) {
+            throw new BusinessException("定向生产订单要求目标制造商已配置有效链上地址");
+        }
+    }
+
+    private static String hashQualityRequirementText(String qualityRequirement) {
+        if (!StringUtils.hasText(qualityRequirement)) {
+            return "";
+        }
+        return HashUtil.sha256Hex(qualityRequirement.trim());
     }
 }

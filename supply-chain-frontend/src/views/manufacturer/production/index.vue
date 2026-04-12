@@ -21,12 +21,28 @@
                 placeholder="选择订单"
                 filterable
                 style="width: 220px"
+                @change="onBatchOrderChange"
               >
                 <el-option
                   v-for="o in orderOptions"
                   :key="o.orderId"
                   :label="`${o.orderId} (${o.bomName})`"
                   :value="o.orderId"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="bomItemOptions.length" label="BOM子件" prop="bomItemId">
+              <el-select
+                v-model="batchForm.bomItemId"
+                placeholder="选择要投产的子件行"
+                filterable
+                style="width: 280px"
+              >
+                <el-option
+                  v-for="it in bomItemOptions"
+                  :key="it.id"
+                  :label="`${it.partNumber || '-'} ${it.partName || ''}（×${it.quantity || 1}/套）`"
+                  :value="it.id"
                 />
               </el-select>
             </el-form-item>
@@ -45,12 +61,17 @@
             :closable="false"
             show-icon
             class="batch-hint"
-            title="「完成数量」= 本批已生成 ECID 数（≤计划）。批次完工条件：设备数≥计划；合格品须质检通过且已上链；不合格品须已完成退货/销毁闭环且处置已上链。满足后状态变「已完成」，也可在满足条件时自动完工。"
+            title="每个批次绑定一条 BOM 子件行：计划数量不得超过「订单套数×该行每套用量」减去该子件已建批计划之和。生成 ECID 时设备类型与链上 devType 由子件料号/名称推导。组装商再将多个子件 ECID 绑定到整机 SN。"
           />
 
           <el-table v-loading="batchLoading" :data="batchList" stripe border style="width: 100%">
             <el-table-column prop="batchId" label="批次号" min-width="160" show-overflow-tooltip />
             <el-table-column prop="orderId" label="订单" min-width="140" show-overflow-tooltip />
+            <el-table-column label="子件(BOM行)" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.bomPartSummary || (row.bomItemId ? `#${row.bomItemId}` : '-') }}
+              </template>
+            </el-table-column>
             <el-table-column prop="plannedQty" label="计划数量" width="100" align="center" />
             <el-table-column prop="completedQty" label="完成数量" width="100" align="center" />
             <el-table-column prop="status" label="状态" width="120" align="center">
@@ -91,6 +112,13 @@
 
         <!-- ECID管理 -->
         <el-tab-pane label="ECID管理" name="ecid">
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            class="batch-hint"
+            title="上链注册前须在「质检」页：上传报告（绑定报告哈希）并标记合格；本页生成 ECID 数量累计不得超过批次计划数。"
+          />
           <!-- Generate form -->
           <el-form :inline="true" :model="ecidGenForm" :rules="ecidGenRules" ref="ecidGenFormRef" class="inline-form">
             <el-form-item label="批次" prop="batchId">
@@ -105,7 +133,7 @@
                 <el-option
                   v-for="b in batchDropdownList"
                   :key="b.batchId"
-                  :label="b.batchId"
+                  :label="b.bomPartSummary ? `${b.batchId} (${b.bomPartSummary})` : b.batchId"
                   :value="b.batchId"
                 />
               </el-select>
@@ -114,7 +142,12 @@
               <el-input-number v-model="ecidGenForm.quantity" :min="1" :max="1000" :step="10" />
             </el-form-item>
             <el-form-item label="设备类型" prop="deviceType">
-              <el-input v-model="ecidGenForm.deviceType" placeholder="如: Sensor-A" style="width: 160px" />
+              <el-input
+                v-model="ecidGenForm.deviceType"
+                :placeholder="selectedBatchHasBomLine ? '子件批次将自动用料号+名称' : '如: Sensor-A'"
+                :disabled="selectedBatchHasBomLine"
+                style="width: 200px"
+              />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="ecidGenerating" @click="handleGenerateEcids">
@@ -197,7 +230,12 @@
                 </el-tooltip>
               </template>
             </el-table-column>
-            <el-table-column prop="deviceType" label="设备类型" width="120" align="center" />
+            <el-table-column label="子件" min-width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.bomPartSummary || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="deviceType" label="链上类型" width="140" show-overflow-tooltip />
             <el-table-column prop="status" label="状态" width="110" align="center">
               <template #default="{ row }">
                 <el-tag :type="ecidStatusType(row.status)" effect="plain" size="small">
@@ -261,7 +299,10 @@ import {
   createBatch,
   completeProductionBatch,
   getBatchList,
-  generateEcids, getEcidList, registerEcids
+  generateEcids,
+  getEcidList,
+  getOrderBomItemsForProduction,
+  registerEcids
 } from '@/api/manufacturer'
 import { useUserStore } from '@/store/user'
 
@@ -301,10 +342,36 @@ const batchTotal = ref(0)
 const batchFormRef = ref(null)
 
 const batchQuery = reactive({ page: 1, pageSize: 10 })
-const batchForm = reactive({ orderId: '', plannedQty: 100 })
+const bomItemOptions = ref([])
+
+const batchForm = reactive({ orderId: '', bomItemId: null, plannedQty: 100 })
 const batchRules = {
   orderId: [{ required: true, message: '请选择关联订单', trigger: 'change' }],
+  bomItemId: [
+    {
+      validator: (_r, v, cb) => {
+        if (bomItemOptions.value.length && (v == null || v === '')) {
+          cb(new Error('请选择 BOM 子件行'))
+        } else {
+          cb()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
   plannedQty: [{ required: true, message: '请输入计划数量', trigger: 'blur' }]
+}
+
+async function onBatchOrderChange(orderId) {
+  batchForm.bomItemId = null
+  bomItemOptions.value = []
+  if (!orderId) return
+  try {
+    const { data } = await getOrderBomItemsForProduction(orderId)
+    bomItemOptions.value = Array.isArray(data) ? data : []
+  } catch {
+    bomItemOptions.value = []
+  }
 }
 
 async function fetchBatches() {
@@ -323,9 +390,15 @@ async function handleCreateBatch() {
   if (!valid) return
   batchCreating.value = true
   try {
-    await createBatch({ orderId: batchForm.orderId, plannedQty: batchForm.plannedQty })
+    const payload = { orderId: batchForm.orderId, plannedQty: batchForm.plannedQty }
+    if (batchForm.bomItemId != null) {
+      payload.bomItemId = batchForm.bomItemId
+    }
+    await createBatch(payload)
     ElMessage.success('批次创建成功')
     batchForm.orderId = ''
+    batchForm.bomItemId = null
+    bomItemOptions.value = []
     batchForm.plannedQty = 100
     fetchBatches()
     fetchBatchDropdownOptions()
@@ -384,14 +457,45 @@ const ecidGenFormRef = ref(null)
 
 const ecidQuery = reactive({ page: 1, pageSize: 20 })
 const ecidGenForm = reactive({ batchId: '', quantity: 10, deviceType: '' })
-const ecidGenRules = {
-  batchId: [{ required: true, message: '请选择批次', trigger: 'change' }],
-  quantity: [{ required: true, message: '请输入数量', trigger: 'blur' }],
-  deviceType: [{ required: true, message: '请输入设备类型', trigger: 'blur' }]
-}
 
 /** 下拉用：一次拉足批次，避免表格分页导致选项不全 */
 const batchDropdownList = ref([])
+
+const ecidGenRules = {
+  batchId: [{ required: true, message: '请选择批次', trigger: 'change' }],
+  quantity: [{ required: true, message: '请输入数量', trigger: 'blur' }],
+  deviceType: [
+    {
+      validator: (_r, v, cb) => {
+        const b = batchDropdownList.value.find((x) => x.batchId === ecidGenForm.batchId)
+        if (b && b.bomItemId) {
+          cb()
+          return
+        }
+        if (!v || !String(v).trim()) {
+          cb(new Error('非子件批次须填写设备类型'))
+        } else {
+          cb()
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+}
+
+const selectedBatchHasBomLine = computed(() => {
+  const b = batchDropdownList.value.find((x) => x.batchId === ecidGenForm.batchId)
+  return !!(b && b.bomItemId)
+})
+
+watch(
+  () => ecidGenForm.batchId,
+  () => {
+    if (selectedBatchHasBomLine.value) {
+      ecidGenForm.deviceType = ''
+    }
+  }
+)
 
 async function fetchBatchDropdownOptions() {
   try {
@@ -449,11 +553,15 @@ async function handleGenerateEcids() {
   if (!valid) return
   ecidGenerating.value = true
   try {
-    await generateEcids({
+    const b = batchDropdownList.value.find((x) => x.batchId === ecidGenForm.batchId)
+    const payload = {
       batchId: ecidGenForm.batchId,
-      quantity: ecidGenForm.quantity,
-      deviceType: ecidGenForm.deviceType
-    })
+      quantity: ecidGenForm.quantity
+    }
+    if (!b?.bomItemId) {
+      payload.deviceType = ecidGenForm.deviceType
+    }
+    await generateEcids(payload)
     ElMessage.success(`成功生成 ${ecidGenForm.quantity} 个 ECID`)
     fetchEcids()
     fetchBatches()

@@ -22,6 +22,9 @@ public class DeviceRecord {
 
     private Long manufacturerId;
 
+    /** 对应 BOM 明细行（子件），组装商按 ECID 引用多子件 */
+    private Long bomItemId;
+
     private String deviceType;
 
     private LocalDateTime manufactureTime;
@@ -41,4 +44,8 @@ public class DeviceRecord {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    /** 列表展示用 */
+    @TableField(exist = false)
+    private String bomPartSummary;
 }

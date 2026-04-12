@@ -54,6 +54,14 @@ public class SmartContractInvokeService {
         sendRequired("signManufacturingAgreement", params);
     }
 
+    /** 与业务库 {@code bus_production_request.status} 对齐（合约不校验枚举，由业务层传入约定字符串）。 */
+    public void updateProductionRequestStatus(String orderId, String status) {
+        List<Object> params = new ArrayList<>();
+        params.add(empty(orderId));
+        params.add(empty(status));
+        sendRequired("updateProductionRequestStatus", params);
+    }
+
     public void registerDeviceRecord(String ecid, String orderId, String batchId, String devType, String testReportHash, String status) {
         List<Object> params = new ArrayList<>();
         params.add(empty(ecid));

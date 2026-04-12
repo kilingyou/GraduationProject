@@ -19,7 +19,9 @@ import com.scm.module.manufacturer.mapper.ProductionBatchMapper;
 import com.scm.module.manufacturer.service.ManufacturingAgreementService;
 import com.scm.module.manufacturer.service.ProductionBatchService;
 import com.scm.module.manufacturer.service.RejectRecordService;
+import com.scm.module.supplier.entity.BomItem;
 import com.scm.module.supplier.entity.ProductionRequest;
+import com.scm.module.supplier.mapper.BomItemMapper;
 import com.scm.module.supplier.service.ProductionRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,7 +31,11 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +47,7 @@ public class ProductionBatchServiceImpl
 
     private final ProductionRequestService productionRequestService;
     private final ManufacturingAgreementService manufacturingAgreementService;
+    private final BomItemMapper bomItemMapper;
     private final DeviceRecordMapper deviceRecordMapper;
     private final RejectRecordService rejectRecordService;
     private final BlockchainAnchorService blockchainAnchorService;
@@ -48,7 +55,7 @@ public class ProductionBatchServiceImpl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ProductionBatch createBatch(String orderId, Long manufacturerId, Integer qty) {
+    public ProductionBatch createBatch(String orderId, Long manufacturerId, Integer qty, Long bomItemId) {
         ProductionRequest order = productionRequestService.getOne(
                 new LambdaQueryWrapper<ProductionRequest>().eq(ProductionRequest::getOrderId, orderId));
         //订单状态校验
@@ -73,6 +80,61 @@ public class ProductionBatchServiceImpl
             throw new BusinessException("未找到本企业与该订单的制造协议");
         }
 
+        int orderQty = order.getQuantity() == null ? 0 : order.getQuantity();
+        Long orderBomId = order.getBomId();
+        if (orderBomId != null) {
+            long itemCount = bomItemMapper.selectCount(new LambdaQueryWrapper<BomItem>()
+                    .eq(BomItem::getBomId, orderBomId));
+            if (itemCount == 0) {
+                throw new BusinessException("订单关联的 BOM 无明细行，请供应商维护 BOM 后再排产");
+            }
+            if (bomItemId == null) {
+                throw new BusinessException("订单已关联 BOM，创建批次时必须选择 BOM 子件行");
+            }
+            BomItem item = bomItemMapper.selectById(bomItemId);
+            if (item == null || !orderBomId.equals(item.getBomId())) {
+                throw new BusinessException("BOM 明细行不存在或不属于本订单的 BOM");
+            }
+            int lineUse = item.getQuantity() == null || item.getQuantity() < 1 ? 1 : item.getQuantity();
+            int lineCap = orderQty * lineUse;
+            if (lineCap > 0) {
+                List<ProductionBatch> lineBatches = list(new LambdaQueryWrapper<ProductionBatch>()
+                        .eq(ProductionBatch::getOrderId, orderId)
+                        .eq(ProductionBatch::getManufacturerId, manufacturerId)
+                        .eq(ProductionBatch::getBomItemId, bomItemId));
+                int sumPlannedLine = 0;
+                for (ProductionBatch b : lineBatches) {
+                    if (b.getPlannedQty() != null) {
+                        sumPlannedLine += b.getPlannedQty();
+                    }
+                }
+                if (sumPlannedLine + qty > lineCap) {
+                    throw new BusinessException(
+                            "该子件批次计划总量不能超过订单需求（订单套数 " + orderQty + " × 行用量 " + lineUse
+                                    + " = " + lineCap + "，已计划 " + sumPlannedLine + "）");
+                }
+            }
+        } else {
+            if (bomItemId != null) {
+                throw new BusinessException("订单未关联 BOM，无法指定 BOM 明细行");
+            }
+            if (orderQty > 0) {
+                List<ProductionBatch> existingForQty = list(new LambdaQueryWrapper<ProductionBatch>()
+                        .eq(ProductionBatch::getOrderId, orderId)
+                        .eq(ProductionBatch::getManufacturerId, manufacturerId));
+                int sumPlanned = 0;
+                for (ProductionBatch b : existingForQty) {
+                    if (b.getPlannedQty() != null) {
+                        sumPlanned += b.getPlannedQty();
+                    }
+                }
+                if (sumPlanned + qty > orderQty) {
+                    throw new BusinessException(
+                            "批次计划总量不能超过订单数量（订单 " + orderQty + "，已计划 " + sumPlanned + "）");
+                }
+            }
+        }
+
         //更新订单状态为生产中
         Long existing = baseMapper.selectCount(new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getOrderId, orderId)
@@ -81,6 +143,7 @@ public class ProductionBatchServiceImpl
             productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
                     .eq(ProductionRequest::getOrderId, orderId)
                     .set(ProductionRequest::getStatus, Constants.IN_PRODUCTION));
+            smartContractInvokeService.updateProductionRequestStatus(orderId, Constants.IN_PRODUCTION);
         }
         //构造批次
         String batchId = "BATCH-" + LocalDate.now().format(DATE_FMT) + "-"
@@ -89,22 +152,27 @@ public class ProductionBatchServiceImpl
                 .setBatchId(batchId)
                 .setOrderId(orderId)
                 .setManufacturerId(manufacturerId)
+                .setBomItemId(bomItemId)
                 .setPlannedQty(qty)
                 .setCompletedQty(0)
                 .setStatus("CREATED");
         //构造批次上链
-        String payload = batchId + "|" + orderId + "|" + manufacturerId + "|" + qty;
+        String payload = batchId + "|" + orderId + "|" + manufacturerId + "|" + qty + "|"
+                + (bomItemId == null ? "" : bomItemId);
         batch.setTxHash(blockchainAnchorService.anchor("PRODUCTION_BATCH_CREATE", HashUtil.sha256Hex(payload)));
         //持久化构造批次
         save(batch);
+        fillProductionBatchBomSummaries(java.util.Collections.singletonList(batch));
         return batch;
     }
 
     @Override
     public List<ProductionBatch> listByManufacturer(Long manufacturerId) {
-        return list(new LambdaQueryWrapper<ProductionBatch>()
+        List<ProductionBatch> rows = list(new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getManufacturerId, manufacturerId)
                 .orderByDesc(ProductionBatch::getCreateTime));
+        fillProductionBatchBomSummaries(rows);
+        return rows;
     }
 
     @Override
@@ -112,9 +180,11 @@ public class ProductionBatchServiceImpl
         if (orderId == null || orderId.trim().isEmpty()) {
             return java.util.Collections.emptyList();
         }
-        return list(new LambdaQueryWrapper<ProductionBatch>()
+        List<ProductionBatch> rows = list(new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getOrderId, orderId)
                 .orderByAsc(ProductionBatch::getCreateTime));
+        fillProductionBatchBomSummaries(rows);
+        return rows;
     }
 
     @Override
@@ -122,7 +192,42 @@ public class ProductionBatchServiceImpl
         LambdaQueryWrapper<ProductionBatch> w = new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getManufacturerId, manufacturerId)
                 .orderByDesc(ProductionBatch::getCreateTime);
-        return page(page, w);
+        IPage<ProductionBatch> raw = page(page, w);
+        fillProductionBatchBomSummaries(raw.getRecords());
+        return raw;
+    }
+
+    private void fillProductionBatchBomSummaries(List<ProductionBatch> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        Set<Long> ids = rows.stream()
+                .map(ProductionBatch::getBomItemId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        List<BomItem> items = bomItemMapper.selectBatchIds(ids);
+        Map<Long, BomItem> byId = items.stream().collect(Collectors.toMap(BomItem::getId, x -> x, (a, b) -> a));
+        for (ProductionBatch b : rows) {
+            if (b.getBomItemId() == null) {
+                continue;
+            }
+            BomItem it = byId.get(b.getBomItemId());
+            if (it != null) {
+                b.setBomPartSummary(summarizeBomItem(it));
+            }
+        }
+    }
+
+    static String summarizeBomItem(BomItem it) {
+        String num = it.getPartNumber() != null ? it.getPartNumber().trim() : "";
+        String name = it.getPartName() != null ? it.getPartName().trim() : "";
+        if (StringUtils.hasText(num) && StringUtils.hasText(name)) {
+            return num + " / " + name;
+        }
+        return StringUtils.hasText(num) ? num : name;
     }
 
     @Override
@@ -295,6 +400,7 @@ public class ProductionBatchServiceImpl
                     "",
                     "AUTO_COMPLETE"
             );
+            smartContractInvokeService.updateProductionRequestStatus(batch.getOrderId(), Constants.COMPLETED);
         }
     }
 }

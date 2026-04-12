@@ -25,6 +25,11 @@ export function createBatch(data) {
   return request({ url: '/manufacturer/production/batch', method: 'post', data })
 }
 
+/** 已接单订单的 BOM 明细行（用于创建子件批次） */
+export function getOrderBomItemsForProduction(orderId) {
+  return request({ url: `/manufacturer/production/order/${orderId}/bom-items`, method: 'get' })
+}
+
 export function completeProductionBatch(batchId) {
   return request({ url: '/manufacturer/production/batch/complete', method: 'post', data: { batchId } })
 }

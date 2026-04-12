@@ -23,6 +23,7 @@ com\scm\module\supplier\dto\ProductionOrderTrackVO$AgreementSummary.class
 com\scm\integration\blockchain\ContractRoleSyncService$ChainRoleResult.class
 com\scm\module\assembler\entity\AssemblyRecord.class
 com\scm\common\Constants.class
+com\scm\module\manufacturer\service\ManufacturerOrderAcceptanceService.class
 com\scm\module\system\service\impl\SysRoleServiceImpl.class
 com\scm\module\distributor\dto\SnImportRow.class
 com\scm\integration\blockchain\SmartContractInvokeService.class
@@ -134,6 +135,7 @@ com\scm\security\JwtAuthenticationFilter.class
 com\scm\integration\blockchain\FiscoBcosBlockchainAnchorService.class
 com\scm\module\distributor\mapper\SalesRecordMapper.class
 com\scm\module\manufacturer\service\QualityReportService.class
+com\scm\module\manufacturer\service\impl\ManufacturerOrderAcceptanceServiceImpl.class
 com\scm\module\distributor\controller\InventoryController.class
 com\scm\module\assembler\service\AssemblyRecordService.class
 com\scm\module\enduser\service\impl\UserProductServiceImpl.class

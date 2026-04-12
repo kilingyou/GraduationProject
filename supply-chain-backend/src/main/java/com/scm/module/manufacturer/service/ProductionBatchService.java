@@ -9,7 +9,10 @@ import java.util.List;
 
 public interface ProductionBatchService extends IService<ProductionBatch> {
 
-    ProductionBatch createBatch(String orderId, Long manufacturerId, Integer qty);
+    /**
+     * @param bomItemId 订单关联 BOM 时必填，对应 {@code bus_bom_item.id}；计划数量不得超过「订单套数×该行用量」减去同子件已建批计划之和
+     */
+    ProductionBatch createBatch(String orderId, Long manufacturerId, Integer qty, Long bomItemId);
 
     List<ProductionBatch> listByManufacturer(Long manufacturerId);
 

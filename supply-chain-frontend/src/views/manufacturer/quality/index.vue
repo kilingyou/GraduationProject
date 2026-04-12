@@ -4,6 +4,13 @@
       <el-tabs v-model="activeTab">
         <!-- 质检操作 -->
         <el-tab-pane label="质检操作" name="operation">
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            class="qc-flow-alert"
+            title="流程：先上传检测报告（写入设备报告哈希）→ 再点「标记合格」→ 最后在「生产」页对 ECID 执行上链注册。"
+          />
           <el-form
             ref="qcFormRef"
             :model="qcForm"
@@ -268,6 +275,10 @@ async function handlePass() {
 async function handleFail() {
   const valid = await qcFormRef.value.validate().catch(() => false)
   if (!valid) return
+  if (!qcForm.fileList.length) {
+    ElMessage.warning('不合格处置须上传检测报告或佐证材料')
+    return
+  }
 
   submitting.value = true
   try {
@@ -366,6 +377,10 @@ onMounted(fetchReports)
 
 <style scoped lang="scss">
 .quality-container {
+  .qc-flow-alert {
+    margin-bottom: 16px;
+  }
+
   .pagination-wrapper {
     display: flex;
     justify-content: flex-end;

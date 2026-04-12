@@ -7,9 +7,16 @@ import com.scm.common.PageResult;
 import com.scm.common.Result;
 import com.scm.module.manufacturer.dto.DeviceRegisterRequest;
 import com.scm.module.manufacturer.entity.DeviceRecord;
+import com.scm.module.manufacturer.entity.ManufacturingAgreement;
 import com.scm.module.manufacturer.entity.ProductionBatch;
 import com.scm.module.manufacturer.service.DeviceRecordService;
+import com.scm.module.manufacturer.service.ManufacturingAgreementService;
 import com.scm.module.manufacturer.service.ProductionBatchService;
+import com.scm.module.supplier.entity.BomItem;
+import com.scm.module.supplier.entity.ProductionRequest;
+import com.scm.module.supplier.entity.Bom;
+import com.scm.module.supplier.service.BomService;
+import com.scm.module.supplier.service.ProductionRequestService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +28,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +39,9 @@ public class ProductionController {
 
     private final ProductionBatchService batchService;
     private final DeviceRecordService deviceRecordService;
+    private final ProductionRequestService productionRequestService;
+    private final ManufacturingAgreementService manufacturingAgreementService;
+    private final BomService bomService;
 
     //创建生产批次
     @PostMapping("/batch")
@@ -56,9 +67,54 @@ public class ProductionController {
         if (orderId == null || orderId.trim().isEmpty() || qty == null || qty <= 0) {
             return Result.fail("参数不完整（需 orderId 与 qty/plannedQty）");
         }
-        //将生产订单设为生产中，构造制造批次，构造批次上链
-        ProductionBatch batch = batchService.createBatch(orderId.trim(), user.getUserId(), qty);
+        Long bomItemId = parseLongParam(params.get("bomItemId"));
+        ProductionBatch batch = batchService.createBatch(orderId.trim(), user.getUserId(), qty, bomItemId);
         return Result.ok(batch);
+    }
+
+    /**
+     * 已接单制造商查看订单 BOM 明细，用于创建「子件批次」。
+     */
+    @GetMapping("/order/{orderId}/bom-items")
+    public Result<List<BomItem>> listBomItemsForProductionOrder(@PathVariable String orderId) {
+        LoginUser user = currentUser();
+        ProductionRequest order = productionRequestService.getOne(
+                new LambdaQueryWrapper<ProductionRequest>()
+                        .eq(ProductionRequest::getOrderId, orderId.trim()));
+        if (order == null) {
+            return Result.fail("订单不存在");
+        }
+        long agreed = manufacturingAgreementService.count(
+                new LambdaQueryWrapper<ManufacturingAgreement>()
+                        .eq(ManufacturingAgreement::getOrderId, order.getOrderId())
+                        .eq(ManufacturingAgreement::getManufacturerId, user.getUserId()));
+        if (agreed == 0) {
+            return Result.fail("无权查看该订单的 BOM");
+        }
+        if (order.getBomId() == null) {
+            return Result.ok(Collections.emptyList());
+        }
+        Bom bom = bomService.getBomWithItems(order.getBomId());
+        List<BomItem> items = bom.getItems();
+        return Result.ok(items != null ? items : Collections.emptyList());
+    }
+
+    private static Long parseLongParam(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number) {
+            return ((Number) raw).longValue();
+        }
+        String s = String.valueOf(raw).trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @PostMapping("/batch/complete")
@@ -192,12 +248,13 @@ public class ProductionController {
         response.setHeader("Content-Disposition", "attachment;filename*=utf-8''" + fn);
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8))) {
             pw.write('\uFEFF');
-            pw.println("ecid,orderId,batchId,deviceType,status,chainRegistered");
+            pw.println("ecid,orderId,batchId,bomItemId,deviceType,status,chainRegistered");
             for (DeviceRecord r : records) {
-                pw.printf("%s,%s,%s,%s,%s,%s%n",
+                pw.printf("%s,%s,%s,%s,%s,%s,%s%n",
                         csv(r.getEcid()),
                         csv(r.getOrderId()),
                         csv(r.getBatchId()),
+                        r.getBomItemId() == null ? "" : String.valueOf(r.getBomItemId()),
                         csv(r.getDeviceType()),
                         csv(r.getStatus()),
                         r.getChainRegistered() != null && r.getChainRegistered() == 1 ? "1" : "0");

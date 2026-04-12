@@ -1,17 +1,13 @@
 package com.scm.module.manufacturer.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.scm.common.Constants;
 import com.scm.common.PageResult;
 import com.scm.common.Result;
-import com.scm.common.util.HashUtil;
-import com.scm.integration.blockchain.BlockchainAnchorService;
-import com.scm.integration.blockchain.SmartContractInvokeService;
-import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.integration.ipfs.IpfsStorageService;
 import com.scm.module.manufacturer.dto.ManufacturerOrderVO;
 import com.scm.module.manufacturer.entity.ManufacturingAgreement;
+import com.scm.module.manufacturer.service.ManufacturerOrderAcceptanceService;
 import com.scm.module.manufacturer.service.ManufacturerOrderViewService;
 import com.scm.module.manufacturer.service.ManufacturingAgreementService;
 import com.scm.module.supplier.entity.Bom;
@@ -44,9 +40,7 @@ public class ManufacturerOrderController {
     private final ProductionRequestService productionRequestService;
     private final ManufacturingAgreementService agreementService;
     private final ManufacturerOrderViewService manufacturerOrderViewService;
-    private final EvidenceStorageService evidenceStorageService;
-    private final BlockchainAnchorService blockchainAnchorService;
-    private final SmartContractInvokeService smartContractInvokeService;
+    private final ManufacturerOrderAcceptanceService manufacturerOrderAcceptanceService;
     private final IpfsStorageService ipfsStorageService;
     private final DesignDocumentService designDocumentService;
     private final BomService bomService;
@@ -78,60 +72,20 @@ public class ManufacturerOrderController {
             @PathVariable String orderId,
             @RequestParam BigDecimal finalPrice,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate,
-            @RequestPart(value = "agreementFile", required = false) MultipartFile agreementFile)
+            @RequestPart("agreementFile") MultipartFile agreementFile)
             throws java.io.IOException {
         LoginUser user = currentUser();
-
-        //根据订单号查询订单
-        ProductionRequest order = productionRequestService.getOne(
-                new LambdaQueryWrapper<ProductionRequest>()
-                        .eq(ProductionRequest::getOrderId, orderId));
-        if (order == null) {
-            return Result.fail("订单不存在");
+        if (agreementFile == null || agreementFile.isEmpty()) {
+            return Result.fail("请上传制造协议文件");
         }
-        if (!Constants.PENDING_ACCEPTANCE.equals(order.getStatus())) {
-            return Result.fail("订单状态不允许接单");
-        }
-        if (order.getTargetManufacturer() != null
-                && !order.getTargetManufacturer().equals(user.getUserId())) {
-            return Result.fail("该订单已定向给其他制造商");
-        }
-
-        //更新订单状态为ACCEPTED
-        productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
-                .eq(ProductionRequest::getOrderId, orderId)
-                .set(ProductionRequest::getStatus, Constants.ACCEPTED));
-
-        //创建ManufacturingAgreement对象，并赋值
-        ManufacturingAgreement agreement = new ManufacturingAgreement();
-        agreement.setOrderId(orderId);
-        agreement.setManufacturerId(user.getUserId());
-        agreement.setFinalPrice(finalPrice);
-        agreement.setDeliveryDate(deliveryDate);
-        //通过anchor上链协议文件哈希
-        String fileHashPart = "";
-        if (agreementFile != null && !agreementFile.isEmpty()) {
-            EvidenceStorageService.StoredEvidence ev = evidenceStorageService.store(
-                    agreementFile.getBytes(),
-                    agreementFile.getOriginalFilename(),
-                    "MANUFACTURING_AGREEMENT_FILE");
-            agreement.setAgreementHash(ev.getFileHash());
-            agreement.setAgreementCid(ev.getIpfsCid());
-            fileHashPart = ev.getFileHash();
-        }
-        //payload=订单号 | 制造商用户 id | 价格 | 交期 | 文件哈希片段
-        String payload = orderId + "|" + user.getUserId() + "|" + finalPrice + "|" + deliveryDate + "|" + fileHashPart;
-        //上链
-        agreement.setTxHash(blockchainAnchorService.anchor("MANUFACTURING_AGREEMENT", HashUtil.sha256Hex(payload)));
-        //调用智能合约signManufacturingAgreement签署协议
-        smartContractInvokeService.signManufacturingAgreement(orderId, agreement.getAgreementHash(), finalPrice.toPlainString(), deliveryDate);
-        //制造商链上地址备注
-        if (StringUtils.hasText(user.getBlockchainAddr())) {
-            agreement.setManufacturerSign("MANUFACTURER_ADDR:" + user.getBlockchainAddr());
-        }
-        //持久化协议实体
-        agreementService.signAgreement(agreement);
-
+        ManufacturingAgreement agreement = manufacturerOrderAcceptanceService.acceptOrder(
+                orderId,
+                user.getUserId(),
+                user.getBlockchainAddr(),
+                finalPrice,
+                deliveryDate,
+                agreementFile.getBytes(),
+                agreementFile.getOriginalFilename());
         return Result.ok(agreement);
     }
 
@@ -189,8 +143,11 @@ public class ManufacturerOrderController {
 
     private boolean canManufacturerAccessDesignFile(ProductionRequest order, Long manufacturerId) {
         if (Constants.PENDING_ACCEPTANCE.equals(order.getStatus())) {
-            return order.getTargetManufacturer() == null
-                    || order.getTargetManufacturer().equals(manufacturerId);
+            // 广播单待接单阶段不开放全量图纸，避免未签约制造商批量获取设计资料
+            if (order.getTargetManufacturer() == null) {
+                return false;
+            }
+            return order.getTargetManufacturer().equals(manufacturerId);
         }
         long cnt = agreementService.count(
                 new LambdaQueryWrapper<ManufacturingAgreement>()

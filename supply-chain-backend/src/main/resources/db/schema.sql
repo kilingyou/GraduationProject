@@ -214,6 +214,7 @@ CREATE TABLE bus_production_batch (
     batch_id        VARCHAR(64)  NOT NULL UNIQUE COMMENT '批次号',
     order_id        VARCHAR(64)  NOT NULL COMMENT '关联订单ID',
     manufacturer_id BIGINT       NOT NULL,
+    bom_item_id     BIGINT       NULL COMMENT 'BOM明细行(子件)，与订单数量×行用量对齐',
     planned_qty     INT          COMMENT '计划数量',
     completed_qty   INT          DEFAULT 0 COMMENT '已完成数量',
     status          VARCHAR(20)  DEFAULT 'CREATED' COMMENT 'CREATED/IN_PROGRESS/COMPLETED',
@@ -221,7 +222,8 @@ CREATE TABLE bus_production_batch (
     create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_order_id (order_id),
-    INDEX idx_manufacturer_id (manufacturer_id)
+    INDEX idx_manufacturer_id (manufacturer_id),
+    INDEX idx_batch_order_bom_item (order_id, bom_item_id)
 ) COMMENT '生产批次表';
 
 -- 设备记录表 (DeviceRecord / ECID)
@@ -231,6 +233,7 @@ CREATE TABLE bus_device_record (
     order_id          VARCHAR(64)  NOT NULL,
     batch_id          VARCHAR(64)  NOT NULL,
     manufacturer_id   BIGINT       NOT NULL,
+    bom_item_id       BIGINT       NULL COMMENT 'BOM明细行(子件)',
     device_type       VARCHAR(100) COMMENT '设备类型',
     manufacture_time  DATETIME     COMMENT '生产时间',
     status            VARCHAR(30)  NOT NULL DEFAULT 'PRODUCED' COMMENT 'PRODUCED/QC_PASS/REJECTED/ASSEMBLED/SOLD/DECOMMISSIONED',
@@ -242,7 +245,8 @@ CREATE TABLE bus_device_record (
     update_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_batch_id (batch_id),
     INDEX idx_manufacturer_id (manufacturer_id),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    INDEX idx_device_order_bom_item (order_id, bom_item_id)
 ) COMMENT '设备记录表(ECID)';
 
 -- 质检报告表

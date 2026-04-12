@@ -22,6 +22,7 @@ import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -64,6 +65,20 @@ public class QualityController {
         report.setRemark(remark);
         QualityReport saved = qualityReportService.saveManufacturedReport(
                 report, file.getBytes(), file.getOriginalFilename());
+
+        if (StringUtils.hasText(targetType) && StringUtils.hasText(targetId)) {
+            String tt = targetType.trim();
+            if ("ECID".equalsIgnoreCase(tt) || "BATCH".equalsIgnoreCase(tt)) {
+                List<String> ecids = resolveEcids(tt, targetId.trim(), user.getUserId());
+                if (!ecids.isEmpty() && StringUtils.hasText(saved.getFileHash())) {
+                    deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()
+                            .in(DeviceRecord::getEcid, ecids)
+                            .eq(DeviceRecord::getManufacturerId, user.getUserId())
+                            .set(DeviceRecord::getTestReportHash, saved.getFileHash())
+                            .set(DeviceRecord::getTestReportCid, saved.getIpfsCid()));
+                }
+            }
+        }
         return Result.ok(saved);
     }
 
@@ -87,6 +102,14 @@ public class QualityController {
                     .collect(Collectors.toList());
             if (ecids.isEmpty()) {
                 return Result.fail("本批次无待标记设备，或设备均已标记为不合格");
+            }
+        }
+        for (String ecid : ecids) {
+            DeviceRecord dev = deviceRecordService.getOne(new LambdaQueryWrapper<DeviceRecord>()
+                    .eq(DeviceRecord::getEcid, ecid)
+                    .eq(DeviceRecord::getManufacturerId, user.getUserId()));
+            if (dev == null || !StringUtils.hasText(dev.getTestReportHash())) {
+                return Result.fail("存在未上传检测报告的设备，请先上传报告并写入哈希后再标记合格: " + ecid);
             }
         }
         String anchorPayload = String.join(",", ecids) + "|QC_PASS";

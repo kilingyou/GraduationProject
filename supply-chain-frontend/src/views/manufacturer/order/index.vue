@@ -133,7 +133,7 @@
             :disabled-date="(d) => d < new Date()"
           />
         </el-form-item>
-        <el-form-item label="协议文件">
+        <el-form-item label="协议文件" prop="fileList" required>
           <el-upload
             v-model:file-list="acceptForm.fileList"
             :auto-upload="false"
@@ -142,7 +142,7 @@
           >
             <el-button type="primary" plain>选择协议文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">按需求上传已协商定稿的《生产制造协议》，将存 IPFS 并记录哈希</div>
+              <div class="el-upload__tip">须上传已签署的《生产制造协议》（存证哈希并上链），广播单接单前无法下载图纸</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -187,6 +187,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getOrderList, acceptOrder, getAgreement, getManufacturerOrderDesignFileBlob } from '@/api/manufacturer'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
 
 const STATUS_MAP = {
   PENDING_ACCEPTANCE: { label: '待接单', type: 'warning' },
@@ -204,7 +207,13 @@ const submitting = ref(false)
 const designDownloadOrderId = ref('')
 
 function canDownloadDesign(row) {
-  return !!(row?.designDocIpfsCid || row?.designDocFileHash)
+  if (!(row?.designDocIpfsCid || row?.designDocFileHash)) return false
+  if (row.status === 'PENDING_ACCEPTANCE') {
+    if (row.targetManufacturer == null) return false
+    const uid = userStore.userId
+    return uid != null && Number(row.targetManufacturer) === Number(uid)
+  }
+  return true
 }
 
 async function downloadDesignFile(row) {
@@ -279,7 +288,17 @@ const acceptForm = reactive({
 
 const acceptRules = {
   finalPrice: [{ required: true, message: '请输入最终报价', trigger: 'blur' }],
-  deliveryDate: [{ required: true, message: '请选择交付日期', trigger: 'change' }]
+  deliveryDate: [{ required: true, message: '请选择交付日期', trigger: 'change' }],
+  fileList: [
+    {
+      required: true,
+      validator: (_r, _v, cb) => {
+        if (!acceptForm.fileList?.length) cb(new Error('请上传制造协议文件'))
+        else cb()
+      },
+      trigger: 'change'
+    }
+  ]
 }
 
 function openAcceptDialog(row) {
@@ -299,9 +318,7 @@ async function handleAccept() {
     const formData = new FormData()
     formData.append('finalPrice', acceptForm.finalPrice)
     formData.append('deliveryDate', acceptForm.deliveryDate)
-    if (acceptForm.fileList.length) {
-      formData.append('agreementFile', acceptForm.fileList[0].raw)
-    }
+    formData.append('agreementFile', acceptForm.fileList[0].raw)
     await acceptOrder(currentOrder.value.orderId, formData)
     ElMessage.success('接单成功')
     acceptVisible.value = false

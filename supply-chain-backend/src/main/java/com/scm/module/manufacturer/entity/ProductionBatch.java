@@ -20,6 +20,9 @@ public class ProductionBatch {
 
     private Long manufacturerId;
 
+    /** 本批次生产的 BOM 子件行；与 {@link #plannedQty} 共同约束该子件 ECID 上限 */
+    private Long bomItemId;
+
     private Integer plannedQty;
 
     private Integer completedQty;
@@ -33,4 +36,8 @@ public class ProductionBatch {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    /** 列表展示用，非表字段 */
+    @TableField(exist = false)
+    private String bomPartSummary;
 }
