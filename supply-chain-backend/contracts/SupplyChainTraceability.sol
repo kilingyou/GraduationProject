@@ -20,6 +20,15 @@ contract SupplyChainTraceability {
         require(roleOf[msg.sender] == role, "role denied");
         _;
     }
+    
+    /** 组装商→渠道发货与分销商出库共用链上流转记录 */
+    modifier onlyAssemblerOrDistributor() {
+        require(
+            roleOf[msg.sender] == ROLE_ASSEMBLER || roleOf[msg.sender] == ROLE_DISTRIBUTOR,
+            "role denied"
+        );
+        _;
+    }
 
     constructor() public {
         owner = msg.sender;
@@ -28,6 +37,7 @@ contract SupplyChainTraceability {
 
     event RoleAssigned(address indexed user, uint8 indexed role, address operator, uint256 ts);
 
+//设置角色，将用户id与角色绑定
     function setRole(address user, uint8 role) public onlyOwner {
         require(role <= ROLE_INSPECTOR, "invalid role");
         roleOf[user] = role;
@@ -41,12 +51,13 @@ contract SupplyChainTraceability {
     mapping(uint256 => address) internal _anchorOperators;
     mapping(uint256 => uint256) internal _anchorTimestamps;
 
+//事件，通用锚定结构
     event AnchorEvent(
-        uint256 indexed id,
-        string bizType,
-        string payloadHash,
-        address operator,
-        uint256 timestamp
+        uint256 indexed id,//锚定序号
+        string bizType,//文件名(资质证书、营业执照)
+        string payloadHash,//文件哈希
+        address operator,//操作人
+        uint256 timestamp//操作时间
     );
 
     function anchor(string bizType, string payloadHash) public returns (uint256) {
@@ -198,7 +209,7 @@ contract SupplyChainTraceability {
         uint256 deliveryTs
     ) public onlyRole(ROLE_MANUFACTURER) {
         require(_productionRequests[orderId].exists, "order missing");
-        // targetManufacturer==0 表示订单大厅（未定向）；首次签署时绑定为 msg.sender
+          // targetManufacturer==0 表示订单大厅（未定向）；首次签署时绑定为 msg.sender
         address target = _productionRequests[orderId].targetManufacturer;
         require(target == address(0) || target == msg.sender, "not target manufacturer");
         if (target == address(0)) {
@@ -436,10 +447,10 @@ contract SupplyChainTraceability {
         string transferType,
         uint256 ts
     );
-//手机交给顺丰，分销商调用 logTransfer 记录物流单号
+//手机交给顺丰：分销商或组装商（渠道发货扫码）调用 logTransfer 记录物流单号
     function logTransfer(string sn, string trackingNo, address receiver, string transferType)
         public
-        onlyRole(ROLE_DISTRIBUTOR)
+        onlyAssemblerOrDistributor
     {
         transferCount++;
         _snToCurrentOwner[sn] = receiver;
