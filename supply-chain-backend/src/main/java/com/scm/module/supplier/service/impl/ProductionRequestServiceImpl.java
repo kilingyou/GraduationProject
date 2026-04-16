@@ -47,42 +47,55 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProductionRequest createOrder(ProductionRequest request) {
-        // PDF: 供应商资质审核通过后，才允许发布生产订单
+        // 业务前置校验 1：
+        // 按创建时间倒序查询该供应商最近一条资质审核记录（只取最新一条）
+        // 规则来源：供应商资质审核通过后，才允许发布生产订单
         SysSupplierAudit audit = sysSupplierAuditMapper.selectOne(new LambdaQueryWrapper<SysSupplierAudit>()
                 .eq(SysSupplierAudit::getUserId, request.getSupplierId())
                 .orderByDesc(SysSupplierAudit::getCreateTime)
                 .last("LIMIT 1"));
+        // 若没有审核记录，或者最新审核状态不是 APPROVED，则直接拒绝下单
         if (audit == null || !"APPROVED".equalsIgnoreCase(audit.getAuditStatus())) {
             throw new BusinessException("供应商资质未审核通过，无法发布生产订单");
         }
-
+        // 业务前置校验 2：必须选择 BOM（生产所需物料清单）
         if (request.getBomId() == null) {
             throw new BusinessException("请选择 BOM");
         }
+        // 根据 bomId 查询 BOM 主记录
         Bom bom = bomService.getById(request.getBomId());
+        // 安全校验：BOM 必须存在，且该 BOM 必须属于当前下单供应商，防止越权使用他人 BOM
         if (bom == null || !request.getSupplierId().equals(bom.getSupplierId())) {
             throw new BusinessException("BOM 不存在或无权使用");
         }
+        // 将 BOM 关联的设计文档 ID 回填到订单中，保证订单与 BOM/图纸关系一致
         request.setDesignDocId(bom.getDesignDocId());
+        // 如果 BOM 关联了设计文档，则进一步查询文档并回填文档哈希
+        // 该哈希后续可用于链上存证、完整性校验或跨系统追溯
         if (bom.getDesignDocId() != null) {
             DesignDocument doc = designDocumentService.getById(bom.getDesignDocId());
             if (doc != null) {
                 request.setDesignDocHash(doc.getFileHash());
             }
         }
-
+        // 校验目标生产厂商是否已完成链上角色注册/就绪
+        // 若未就绪，该方法内部应抛出异常中断流程
         ensureTargetManufacturerChainReady(request.getTargetManufacturer());
-
+        // 生成业务订单号（去掉 UUID 中的 '-'，得到更紧凑的字符串）
         request.setOrderId(UUID.randomUUID().toString().replace("-", ""));
+        // 新建订单初始状态：待接单
         request.setStatus("PENDING_ACCEPTANCE");
+        // 先落库，获得数据库主键及持久化快照
         save(request);
-
+        // 对质量要求文本做哈希，避免将原文直接上链（减小链上数据、保护敏感内容）
         String qualityReqHash = hashQualityRequirementText(request.getQualityRequirement());
-
+        // 组织“锚定”载荷（订单号 + 供应商ID），作为业务凭据摘要来源
         String anchorPayload = request.getOrderId() + "|" + request.getSupplierId();
-        //通用锚定上链“PRODUCTION_ORDER”+生产订单id和供应商账户id的哈希
+        // 通用锚定上链：业务类型为 PRODUCTION_ORDER
+        // 链上仅写入锚定摘要（SHA-256），返回交易哈希 txHash 供后续审计追溯
         request.setTxHash(blockchainAnchorService.anchor("PRODUCTION_ORDER", HashUtil.sha256Hex(anchorPayload)));
-        //创建生产订单
+        // 调用智能合约创建生产请求（链上主业务对象）
+        // 入参包含：订单号、目标厂商、BOM 文件哈希、数量、设计文档哈希、交付时间、质量要求哈希
         smartContractInvokeService.createProductionRequest(
                 request.getOrderId(),
                 request.getTargetManufacturer(),
@@ -92,11 +105,14 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
                 request.getExpectedDelivery(),
                 qualityReqHash
         );
-        // 合约 create 默认 CREATED，与库中待接单语义对齐
+        // 合约 create 后默认状态为 CREATED；
+        // 为与数据库中的“待接单(PENDING_ACCEPTANCE)”语义保持一致，立即同步更新合约状态
         smartContractInvokeService.updateProductionRequestStatus(request.getOrderId(), Constants.PENDING_ACCEPTANCE);
+        // 将 txHash 等链上结果写回数据库订单记录
         updateById(request);
-
+        // 记录关键审计日志
         log.info("Production order created: id={}, orderId={}", request.getId(), request.getOrderId());
+        // 返回包含完整信息的订单对象
         return request;
     }
 

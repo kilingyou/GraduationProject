@@ -46,19 +46,26 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         register(user, roleKey, null);
     }
 
+    /**
+     * 供应商注册功能
+     * @param user 系统用户实体
+     * @param roleKey 供应商字符串
+     * @param qualificationFiles 资质证书与营业执照文件列表
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void register(SysUser user, String roleKey, List<MultipartFile> qualificationFiles) {
+        //检测账户是否已经存在，存在则抛错
         Long existCount = baseMapper.selectCount(
                 new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, user.getUsername()));
         if (existCount > 0) {
             throw new BusinessException("用户名已存在");
         }
-
         //加密账户密码
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         //1代表账户启用、0代表禁用。与管理员控制有关，和资质审核无关
         user.setStatus(1);
+        //逻辑删除标记，0表示未删除
         user.setDelFlag(0);
         //生成账户，包含随机生成账户地址与私钥
         BlockchainAnchorService.BlockchainAccount account = blockchainAnchorService.generateBlockchainAccount();
@@ -67,15 +74,18 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (StringUtils.hasText(account.getPrivateKeyHex())) {
             user.setPrivateKeyEnc(Base64.getEncoder().encodeToString(account.getPrivateKeyHex().getBytes(StandardCharsets.UTF_8)));
         }
+        //持久化SysUser对象，往SysUser表中插入数据
         baseMapper.insert(user);
-
+        //判断是否是供应商
         if ("supplier".equalsIgnoreCase(roleKey)) {
+            //创建供应商审核表实体，并设置相关信息
             SysSupplierAudit audit = new SysSupplierAudit();
             audit.setUserId(user.getId());
             audit.setEnterpriseName(user.getEnterpriseName());
             audit.setCreditCode(user.getCreditCode());
+            //设置供应商审核状态为PENDING
             audit.setAuditStatus("PENDING");
-
+            //便利文件列表
             List<MultipartFile> files = qualificationFiles != null ? qualificationFiles : Collections.emptyList();
             for (int i = 0; i < files.size(); i++) {
                 MultipartFile f = files.get(i);
@@ -88,7 +98,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 } catch (IOException e) {
                     throw new BusinessException("资质文件读取失败");
                 }
-                // 资质文件仅入 IPFS 与库表；链上 anchor 在监管审核通过后执行（见 AuditController.approve）。
+                //计算文件哈希，将文件存入ipfs并返回cid
                 EvidenceStorageService.StoredEvidence ev =
                         evidenceStorageService.storeWithoutAnchor(bytes, f.getOriginalFilename());
                 if (i == 0) {
@@ -99,15 +109,16 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                     audit.setCertIpfsCid(ev.getIpfsCid());
                 }
             }
+            //往sysSupplierAudit插入数据
             sysSupplierAuditMapper.insert(audit);
         }
-
         if (StringUtils.hasText(roleKey)) {
             SysRole role = sysRoleMapper.selectOne(new LambdaQueryWrapper<SysRole>()
                     .eq(SysRole::getRoleKey, roleKey.trim().toLowerCase())
                     .eq(SysRole::getStatus, 1)
                     .last("LIMIT 1"));
             if (role != null) {
+                //在“用户-角色关联表”里插入一条关系
                 baseMapper.insertUserRole(user.getId(), role.getId());
                 // 与 assignRole 一致：注册后立即把角色写入合约 roleOf，否则 signManufacturingAgreement 等 onlyRole 会 revert
                 contractRoleSyncService.syncUserRoleToChain(user.getId());

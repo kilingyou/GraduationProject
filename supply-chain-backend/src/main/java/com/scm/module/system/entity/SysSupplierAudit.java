@@ -9,6 +9,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+//供应商审核表
 @Data
 @TableName("sys_supplier_audit")
 public class SysSupplierAudit {

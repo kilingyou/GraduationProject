@@ -25,7 +25,7 @@ public class EvidenceStorageService {
         String fileHash = HashUtil.sha256Hex(data);
         //存入ipfs并返回CID
         String cid = ipfsStorageService.add(data, fileName != null ? fileName : "blob.bin");
-        //调用anchor方法执行交易，参数为文件类型，返回交易哈希
+        //调用anchor函数执行交易，参数为文件类型，返回交易哈希
         String txHash = blockchainAnchorService.anchor(anchorBizType, fileHash);
         return new StoredEvidence(fileHash, cid, txHash);
     }
@@ -39,6 +39,7 @@ public class EvidenceStorageService {
         }
         String fileHash = HashUtil.sha256Hex(data);
         String cid = ipfsStorageService.add(data, fileName != null ? fileName : "blob.bin");
+        //返回StoredEvdience对象，包含cid、文件哈希
         return new StoredEvidence(fileHash, cid, null);
     }
 

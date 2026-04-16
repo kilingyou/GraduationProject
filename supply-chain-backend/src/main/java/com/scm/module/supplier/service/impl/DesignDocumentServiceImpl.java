@@ -36,7 +36,6 @@ public class DesignDocumentServiceImpl extends ServiceImpl<DesignDocumentMapper,
         doc.setChainStatus("ON_CHAIN");
         doc.setTxHash(ev.getTxHash());
         save(doc);
-
         log.info("Design document uploaded: id={}, name={}", doc.getId(), doc.getDocName());
         return doc;
     }

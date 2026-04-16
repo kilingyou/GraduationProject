@@ -34,6 +34,7 @@ public class BomController {
     private final BomService bomService;
     private final SupplierAuditGuardService supplierAuditGuardService;
 
+    //上传物料清单
     @PostMapping
     public Result<Bom> create(@RequestBody Bom bom) {
         LoginUser loginUser = getCurrentUser();
@@ -43,7 +44,6 @@ public class BomController {
         bom.setSupplierId(loginUser.getUserId());
         //物料列表
         List<BomItem> items = bom.getItems();
-        //
         Bom created = bomService.createBom(bom, items);
         return Result.ok(created);
     }

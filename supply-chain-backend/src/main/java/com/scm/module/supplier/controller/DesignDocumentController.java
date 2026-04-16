@@ -39,7 +39,7 @@ public class DesignDocumentController {
                                          @RequestParam(value = "version", required = false) String version,
                                          @RequestParam(value = "updateNote", required = false) String updateNote) {
         LoginUser loginUser = getCurrentUser();
-        //校验是否资质审核通过
+        //校验是否资质审核通过，即查询数据库账号状态是否为APPROVED
         supplierAuditGuardService.ensureApproved(loginUser.getUserId());
         //设置设计文档信息
         DesignDocument doc = new DesignDocument()

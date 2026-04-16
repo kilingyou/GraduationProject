@@ -44,6 +44,7 @@ public class ContractRoleSyncService {
             log.info("Skip role sync: role {} not mapped to contract", role.getRoleKey());
             return;
         }
+        //设置账户链上角色
         setChainRole(user.getBlockchainAddr().trim(), contractRole, userId, role.getRoleKey());
     }
 
@@ -135,11 +136,11 @@ public class ContractRoleSyncService {
     }
 
     private void setChainRole(String blockchainAddr, int contractRole, Long userId, String roleKey) {
+        //检测区块链连通性
         FiscoBcosBlockchainAnchorService fisco = fiscoProvider.getIfAvailable();
         if (fisco == null || !fisco.isAvailable()) {
             throw new IllegalStateException("FISCO not available for role sync");
         }
-
         //将区块链地址与角色id绑定上链
         try {
             List<Object> params = new ArrayList<>();

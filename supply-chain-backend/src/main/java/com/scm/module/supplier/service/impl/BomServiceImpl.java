@@ -46,27 +46,34 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Bom createBom(Bom bom, List<BomItem> items) {
+        // 1) 新建 BOM 时，先将链上状态置为“待上链”
+        //    这样即使后续上链失败，数据库里也能明确看到当前记录的处理阶段
         bom.setChainStatus("PENDING");
-        //向数据库中插入物料清单数据
+        // 2) 先保存 BOM 主表数据
+        //    save 后通常会回填主键 bom.getId()，后面子项需要用这个 ID 建立关联
         save(bom);
-
-        //插入详细物料数据
+        // 3) 保存 BOM 明细项（子物料）
+        //    - 判空：避免空指针和无意义循环
+        //    - 给每个明细设置 bomId，建立“主表-子表”关联关系
         if (items != null && !items.isEmpty()) {
             for (BomItem item : items) {
                 item.setBomId(bom.getId());
                 bomItemMapper.insert(item);
             }
         }
-
         List<BomItem> persisted = bomItemMapper.selectList(
                 new LambdaQueryWrapper<BomItem>().eq(BomItem::getBomId, bom.getId()));
         try {
+            // 5) 组装上链清单（manifest）数据结构
+            //    使用 LinkedHashMap 保留插入顺序，序列化后的 JSON 字段顺序更稳定、可读性更好
             Map<String, Object> manifest = new LinkedHashMap<>();
             manifest.put("bomId", bom.getId());
             manifest.put("bomName", bom.getBomName());
             manifest.put("version", bom.getVersion());
             manifest.put("designDocId", bom.getDesignDocId());
             manifest.put("supplierId", bom.getSupplierId());
+            // 6) 将 BOM 明细转换为可序列化的结构（List<Map>）
+            //    每个子项只抽取需要上链/存证的关键字段
             List<Map<String, Object>> itemMaps = new ArrayList<>();
             for (BomItem i : persisted) {
                 Map<String, Object> m = new LinkedHashMap<>();
@@ -79,21 +86,31 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
                 itemMaps.add(m);
             }
             manifest.put("items", itemMaps);
+            // 7) 序列化清单为 JSON 字节数组，准备进行存证/上链
             byte[] bytes = objectMapper.writeValueAsBytes(manifest);
+            // 8) 调用存证服务：
+            //    - 传入内容 bytes
+            //    - 生成可追踪的文件名 bom-{id}.json
+            //    - 指定业务类型 BOM_MANIFEST
+            //    返回结果通常包含：文件哈希、IPFS CID、链上交易哈希
             EvidenceStorageService.StoredEvidence ev =
                     evidenceStorageService.store(bytes, "bom-" + bom.getId() + ".json", "BOM_MANIFEST");
+            // 9) 将存证返回信息回写到 BOM 记录，形成“业务数据 <-> 链上凭证”的映射
             bom.setFileHash(ev.getFileHash());
             bom.setIpfsCid(ev.getIpfsCid());
             bom.setTxHash(ev.getTxHash());
+            // 10) 上链成功后，更新链上状态
             bom.setChainStatus("ON_CHAIN");
+            // 11) 更新 BOM 主表（写回链上相关字段和状态）
             updateById(bom);
         } catch (Exception e) {
             log.error("BOM manifest chain step failed: bomId={}", bom.getId(), e);
             throw new BusinessException("BOM 保存成功但清单上链失败: " + e.getMessage());
         }
-
+        // 14) 将持久化后的明细回填到返回对象，便于调用方直接拿到完整数据
         bom.setItems(persisted);
         log.info("BOM created: id={}, name={}, items={}", bom.getId(), bom.getBomName(), persisted.size());
+        // 16) 返回创建完成（且已上链成功）的 BOM 对象
         return bom;
     }
 

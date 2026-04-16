@@ -91,6 +91,7 @@ public class AuthController {
             @RequestParam(required = false) String email,
             @RequestParam String roleKey,
             @RequestParam(value = "files", required = false) MultipartFile[] files) {
+        //创建系统用户实体，并设置相关信息
         SysUser user = new SysUser();
         user.setUsername(username);
         user.setPassword(password);
@@ -99,11 +100,11 @@ public class AuthController {
         user.setContactPerson(contactPerson);
         user.setPhone(phone);
         user.setEmail(email);
-
-        //资质证书与营业执照列表，类型为文件
+        //将资质证书与营业执照存进qualification列表
         List<MultipartFile> qualification = files == null ? Collections.<MultipartFile>emptyList()
                 : Arrays.stream(files).filter(f -> f != null && !f.isEmpty()).collect(Collectors.toList());
         if ("supplier".equalsIgnoreCase(roleKey)) {
+            //如果是供应商就走供应商注册
             sysUserService.register(user, roleKey, qualification);
         } else {
             sysUserService.register(user, roleKey);

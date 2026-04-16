@@ -168,27 +168,48 @@ public class FiscoBcosBlockchainAnchorService implements BlockchainAnchorService
     }
 
     public String sendTransactionByPrivateKey(String privateKeyHex, String functionName, List<Object> params) throws Exception {
+        // 1) 基础可用性校验：
+        //    - SDK 必须初始化成功（available=true）
+        //    - 合约地址必须已配置
+        //    否则无法构造交易目标，直接抛出非法状态异常
         if (!available || contractAddress == null || contractAddress.trim().isEmpty()) {
             throw new IllegalStateException("FISCO BCOS not available or contract address not set");
         }
+        // 2) 私钥入参校验：
+        //    该方法是“指定私钥发交易”，私钥为空会导致签名无法进行
         if (privateKeyHex == null || privateKeyHex.trim().isEmpty()) {
             throw new IllegalArgumentException("privateKeyHex is empty");
         }
+        // 3) 使用传入私钥创建临时密钥对（发送方身份）
+        //    与默认账号不同：此处可按业务需要模拟/切换具体链上账户发起交易
         CryptoKeyPair keyPair = client.getCryptoSuite().createKeyPair(privateKeyHex.trim());
+        // 4) 基于该密钥对创建交易处理器：
+        //    后续所有交易将使用此私钥签名，并提交到配置的合约 ABI/BIN 上下文
         AssembleTransactionProcessor processor = TransactionProcessorFactory.createAssembleTransactionProcessor(
                 client, keyPair, abiPath, binPath);
+        // 5) 发送合约写交易：
+        //    - CONTRACT_NAME：合约名
+        //    - contractAddress：已部署合约地址
+        //    - functionName：要调用的合约方法名
+        //    - params：方法参数列表（需与 ABI 中函数签名顺序一致）
         TransactionResponse resp = processor.sendTransactionAndGetResponseByContractLoader(
                 CONTRACT_NAME, contractAddress, functionName, params);
+        // 6) 读取交易回执（receipt）：
+        //    回执是判断链上执行是否成功的关键依据（包含状态码、交易哈希等）
         org.fisco.bcos.sdk.model.TransactionReceipt receipt = resp.getTransactionReceipt();
+        // 7) 防御式判断：回执为空通常代表链路或执行过程异常
         if (receipt == null) {
             throw new IllegalStateException("Empty transaction receipt for function: " + functionName);
         }
+        // 8) 根据回执状态判断交易是否真正成功上链执行
+        //    若失败，抛出包含状态码、状态描述、txHash 的异常，便于排查问题
         if (!receipt.isStatusOK()) {
             throw new RuntimeException("Transaction failed: function=" + functionName
                     + ", status=" + receipt.getStatus()
                     + ", statusMsg=" + receipt.getStatusMsg()
                     + ", txHash=" + receipt.getTransactionHash());
         }
+        // 9) 成功时返回交易哈希，供上层做审计追踪或后续查询
         return receipt.getTransactionHash();
     }
 

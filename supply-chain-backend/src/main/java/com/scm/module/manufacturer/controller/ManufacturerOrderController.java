@@ -78,6 +78,7 @@ public class ManufacturerOrderController {
         if (agreementFile == null || agreementFile.isEmpty()) {
             return Result.fail("请上传制造协议文件");
         }
+        //创建制造协议对象
         ManufacturingAgreement agreement = manufacturerOrderAcceptanceService.acceptOrder(
                 orderId,
                 user.getUserId(),
