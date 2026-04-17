@@ -56,22 +56,28 @@ public class ProductionBatchServiceImpl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProductionBatch createBatch(String orderId, Long manufacturerId, Integer qty, Long bomItemId) {
+        // 根据订单号查询生产订单
         ProductionRequest order = productionRequestService.getOne(
                 new LambdaQueryWrapper<ProductionRequest>().eq(ProductionRequest::getOrderId, orderId));
-        //订单状态校验
+
+        // 订单状态校验
         if (order == null) {
             throw new BusinessException("订单不存在");
         }
+        // 已撤销订单不能创建批次
         if (Constants.CANCELLED.equals(order.getStatus())) {
             throw new BusinessException("订单已撤销，无法创建批次");
         }
+        // 已完工订单不能创建批次
         if (Constants.COMPLETED.equals(order.getStatus())) {
             throw new BusinessException("订单已完工，无法创建批次");
         }
+        // 只有“已接单”或“生产中”状态的订单才允许创建生产批次
         if (!Constants.ACCEPTED.equals(order.getStatus()) && !Constants.IN_PRODUCTION.equals(order.getStatus())) {
             throw new BusinessException("订单须为已接单或生产中才可创建生产批次");
         }
-        //校验制造协议
+
+        // 校验当前制造商是否与该订单存在制造协议
         ManufacturingAgreement agreement = manufacturingAgreementService.getOne(
                 new LambdaQueryWrapper<ManufacturingAgreement>()
                         .eq(ManufacturingAgreement::getOrderId, orderId)
@@ -80,34 +86,52 @@ public class ProductionBatchServiceImpl
             throw new BusinessException("未找到本企业与该订单的制造协议");
         }
 
+        // 获取订单数量，若为空则按 0 处理
         int orderQty = order.getQuantity() == null ? 0 : order.getQuantity();
+        // 获取订单关联的 BOM 主表 ID
         Long orderBomId = order.getBomId();
+
+        // 如果订单已关联 BOM，则必须按 BOM 子件维度创建批次
         if (orderBomId != null) {
+            // 校验该 BOM 是否存在明细行
             long itemCount = bomItemMapper.selectCount(new LambdaQueryWrapper<BomItem>()
                     .eq(BomItem::getBomId, orderBomId));
             if (itemCount == 0) {
                 throw new BusinessException("订单关联的 BOM 无明细行，请供应商维护 BOM 后再排产");
             }
+
+            // 已关联 BOM 时，创建批次必须指定具体的 BOM 明细行
             if (bomItemId == null) {
                 throw new BusinessException("订单已关联 BOM，创建批次时必须选择 BOM 子件行");
             }
+
+            // 校验所选 BOM 明细行是否存在，且确实属于当前订单对应的 BOM
             BomItem item = bomItemMapper.selectById(bomItemId);
             if (item == null || !orderBomId.equals(item.getBomId())) {
                 throw new BusinessException("BOM 明细行不存在或不属于本订单的 BOM");
             }
+
+            // 计算该 BOM 子件单套用量，若为空或小于 1，则默认按 1 处理
             int lineUse = item.getQuantity() == null || item.getQuantity() < 1 ? 1 : item.getQuantity();
+            // 计算该子件允许的最大排产量 = 订单数量 × 子件单套用量
             int lineCap = orderQty * lineUse;
+
             if (lineCap > 0) {
+                // 查询当前订单、当前制造商、当前 BOM 子件下已有的生产批次
                 List<ProductionBatch> lineBatches = list(new LambdaQueryWrapper<ProductionBatch>()
                         .eq(ProductionBatch::getOrderId, orderId)
                         .eq(ProductionBatch::getManufacturerId, manufacturerId)
                         .eq(ProductionBatch::getBomItemId, bomItemId));
+
+                // 累加该子件已计划生产数量
                 int sumPlannedLine = 0;
                 for (ProductionBatch b : lineBatches) {
                     if (b.getPlannedQty() != null) {
                         sumPlannedLine += b.getPlannedQty();
                     }
                 }
+
+                // 校验新建批次后，总计划量是否超过该子件需求上限
                 if (sumPlannedLine + qty > lineCap) {
                     throw new BusinessException(
                             "该子件批次计划总量不能超过订单需求（订单套数 " + orderQty + " × 行用量 " + lineUse
@@ -115,19 +139,27 @@ public class ProductionBatchServiceImpl
                 }
             }
         } else {
+            // 如果订单未关联 BOM，则不允许指定 BOM 明细行
             if (bomItemId != null) {
                 throw new BusinessException("订单未关联 BOM，无法指定 BOM 明细行");
             }
+
+            // 未关联 BOM 时，批次总计划量不能超过订单总数量
             if (orderQty > 0) {
+                // 查询该订单、该制造商下已有的所有生产批次
                 List<ProductionBatch> existingForQty = list(new LambdaQueryWrapper<ProductionBatch>()
                         .eq(ProductionBatch::getOrderId, orderId)
                         .eq(ProductionBatch::getManufacturerId, manufacturerId));
+
+                // 累加已有批次的计划数量
                 int sumPlanned = 0;
                 for (ProductionBatch b : existingForQty) {
                     if (b.getPlannedQty() != null) {
                         sumPlanned += b.getPlannedQty();
                     }
                 }
+
+                // 校验新建批次后，总计划量是否超过订单数量
                 if (sumPlanned + qty > orderQty) {
                     throw new BusinessException(
                             "批次计划总量不能超过订单数量（订单 " + orderQty + "，已计划 " + sumPlanned + "）");
@@ -135,19 +167,24 @@ public class ProductionBatchServiceImpl
             }
         }
 
-        //更新订单状态为生产中
+        // 判断当前订单在该制造商下是否已经存在生产批次
         Long existing = baseMapper.selectCount(new LambdaQueryWrapper<ProductionBatch>()
                 .eq(ProductionBatch::getOrderId, orderId)
                 .eq(ProductionBatch::getManufacturerId, manufacturerId));
+
+        // 如果这是第一个批次，则将订单状态更新为“生产中”，并同步上链
         if (existing != null && existing == 0) {
             productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
                     .eq(ProductionRequest::getOrderId, orderId)
                     .set(ProductionRequest::getStatus, Constants.IN_PRODUCTION));
             smartContractInvokeService.updateProductionRequestStatus(orderId, Constants.IN_PRODUCTION);
         }
-        //构造批次
+
+        // 生成批次编号：BATCH-日期-随机码
         String batchId = "BATCH-" + LocalDate.now().format(DATE_FMT) + "-"
                 + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+
+        // 构造生产批次对象
         ProductionBatch batch = new ProductionBatch()
                 .setBatchId(batchId)
                 .setOrderId(orderId)
@@ -156,13 +193,19 @@ public class ProductionBatchServiceImpl
                 .setPlannedQty(qty)
                 .setCompletedQty(0)
                 .setStatus("CREATED");
-        //构造批次上链
+
+        // 组织批次上链内容，并记录上链交易哈希
         String payload = batchId + "|" + orderId + "|" + manufacturerId + "|" + qty + "|"
                 + (bomItemId == null ? "" : bomItemId);
         batch.setTxHash(blockchainAnchorService.anchor("PRODUCTION_BATCH_CREATE", HashUtil.sha256Hex(payload)));
-        //持久化构造批次
+
+        // 保存批次数据
         save(batch);
+
+        // 回填批次对应的 BOM 汇总信息
         fillProductionBatchBomSummaries(java.util.Collections.singletonList(batch));
+
+        // 返回新创建的批次对象
         return batch;
     }
 

@@ -51,25 +51,40 @@ public class QualityController {
             @RequestParam(required = false, defaultValue = "PASS") String result,
             @RequestParam(required = false) String reportName,
             @RequestParam(required = false) String remark) throws IOException {
+
+        // 获取当前登录用户信息，后续用于记录报告上传人和区块链签名地址
         LoginUser user = currentUser();
+
+        // 校验上传文件是否为空
         if (file == null || file.isEmpty()) {
             return Result.fail("请上传报告文件");
         }
+
+        // 构造质检报告对象，并写入基础信息
         QualityReport report = new QualityReport();
-        report.setReporterId(user.getUserId());
-        report.setSignerAddr(user.getBlockchainAddr());
-        report.setTargetType(targetType);
-        report.setTargetId(targetId);
-        report.setResult(result);
-        report.setReportName(reportName);
-        report.setRemark(remark);
+        report.setReporterId(user.getUserId());              // 报告上传人ID
+        report.setSignerAddr(user.getBlockchainAddr());      // 上传人区块链地址
+        report.setTargetType(targetType);                    // 报告关联对象类型，例如 ECID 或 BATCH
+        report.setTargetId(targetId);                        // 报告关联对象ID
+        report.setResult(result);                            // 检测结果，默认 PASS
+        report.setReportName(reportName);                    // 报告名称
+        report.setRemark(remark);                            // 备注信息
+
+        // 保存质检报告，并上传文件内容
         QualityReport saved = qualityReportService.saveManufacturedReport(
                 report, file.getBytes(), file.getOriginalFilename());
 
+        // 如果目标类型和目标ID存在，则进一步尝试把报告信息回写到设备记录中
         if (StringUtils.hasText(targetType) && StringUtils.hasText(targetId)) {
+            // 去除目标类型两端空格，避免比较时受空白字符影响
             String tt = targetType.trim();
+
+            // 仅当目标类型为 ECID 或 BATCH 时，才处理设备记录关联
             if ("ECID".equalsIgnoreCase(tt) || "BATCH".equalsIgnoreCase(tt)) {
+                // 根据目标类型和目标ID解析出对应的 ECID 列表
                 List<String> ecids = resolveEcids(tt, targetId.trim(), user.getUserId());
+
+                // 若存在设备记录，且报告文件哈希不为空，则将报告哈希和 IPFS CID 更新到设备记录中
                 if (!ecids.isEmpty() && StringUtils.hasText(saved.getFileHash())) {
                     deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()
                             .in(DeviceRecord::getEcid, ecids)
@@ -79,6 +94,8 @@ public class QualityController {
                 }
             }
         }
+
+        // 返回保存后的质检报告信息
         return Result.ok(saved);
     }
 

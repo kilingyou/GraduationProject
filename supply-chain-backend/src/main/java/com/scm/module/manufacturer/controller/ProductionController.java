@@ -51,7 +51,7 @@ public class ProductionController {
     @PostMapping("/batch")
     public Result<ProductionBatch> createBatch(@RequestBody Map<String, Object> params) {
         LoginUser user = currentUser();
-        //订单id
+        //订单编号
         String orderId = (String) params.get("orderId");
         //计划制造数量
         Object q = params.get("qty");
@@ -216,36 +216,58 @@ public class ProductionController {
     }
 
     /**
-     * 批量生产ECID
-     * @param params 批次id、数量、设备类型
-     * @return
+     * 批量生成 ECID
+     *
+     * @param params 请求参数，包含批次ID、订单ID、数量、设备类型等信息
+     * @return 返回生成的 ECID 列表
      */
     @PostMapping("/ecid/generate")
     public Result<List<String>> generateEcids(@RequestBody Map<String, Object> params) {
+        // 获取当前登录用户
         LoginUser user = currentUser();
+
+        // 获取批次ID
         String batchId = (String) params.get("batchId");
+
+        // 获取订单ID，如果不存在则为 null
         String orderId = params.get("orderId") != null ? String.valueOf(params.get("orderId")) : null;
+
+        // 优先读取 qty 参数，若不存在则尝试读取 quantity 参数
         Object q = params.get("qty");
         if (q == null) {
             q = params.get("quantity");
         }
+
+        // 如果数量参数是数字类型，直接转为 Integer
         Integer qty = q instanceof Number ? ((Number) q).intValue() : null;
+
+        // 如果不是数字类型但不为空，则尝试通过字符串转换为整数
         if (q != null && qty == null) {
             try {
                 qty = Integer.parseInt(String.valueOf(q));
             } catch (NumberFormatException ignored) {
-                /* ignore */
+                // 转换失败时忽略异常，qty 保持为 null
             }
         }
+
+        // 获取设备类型
         String deviceType = params.get("deviceType") != null ? String.valueOf(params.get("deviceType")) : null;
+
+        // 校验必要参数：批次ID不能为空，数量必须大于0
         if (batchId == null || batchId.trim().isEmpty() || qty == null || qty <= 0) {
             return Result.fail("参数不完整");
         }
+
+        // 去除批次ID首尾空格
         batchId = batchId.trim();
-        //批量生成ECID
+
+        // 批量生成 ECID：
+        // 如果没有传订单ID，则按批次生成；
+        // 如果传了订单ID，则按批次 + 订单维度生成
         if (orderId == null || orderId.trim().isEmpty()) {
             return Result.ok(deviceRecordService.generateEcidsForBatch(batchId, user.getUserId(), qty, deviceType));
         }
+
         return Result.ok(deviceRecordService.generateEcids(batchId, orderId.trim(), user.getUserId(), qty, deviceType));
     }
 
@@ -273,19 +295,27 @@ public class ProductionController {
 
     /**
      * 上链注册设备功能
-     * @param request 设备记录id列表
-     * @return
+     *
+     * @param request 设备记录 ID 列表或 ECID 列表
+     * @return 上链注册结果
      */
     @PostMapping("/ecid/register")
     public Result<Void> registerOnChain(@RequestBody DeviceRegisterRequest request) {
+        // 获取当前登录用户，用于限定只能操作当前用户所属的设备记录
         LoginUser user = currentUser();
+
+        // 校验请求参数：
+        // ids 和 ecids 不能同时都为空，至少要提交一种标识方式
         if (request == null
                 || ((request.getIds() == null || request.getIds().isEmpty())
                 && (request.getEcids() == null || request.getEcids().isEmpty()))) {
             return Result.fail("请提交 ids 或 ecids");
         }
-        //对设备记录调用anchor逐条上链
+
+        // 调用设备服务，将设备记录逐条进行上链注册
         boolean success = deviceRecordService.registerOnChain(request, user.getUserId());
+
+        // 根据上链结果返回成功或失败响应
         return success ? Result.ok() : Result.fail("上链注册失败");
     }
 

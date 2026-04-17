@@ -50,64 +50,109 @@ public class DeviceRecordServiceImpl
     private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
 
-    //批量生产ECID
+    // 批量生成 ECID
     @Override
     public List<String> generateEcids(String batchId, String orderId, Long manufacturerId, Integer qty, String deviceType) {
+        // 根据批次号查询生产批次
         ProductionBatch batch = productionBatchService.getOne(
                 new LambdaQueryWrapper<ProductionBatch>().eq(ProductionBatch::getBatchId, batchId));
+
+        // 校验批次是否存在，以及当前制造商是否有权限操作该批次
         if (batch == null || !manufacturerId.equals(batch.getManufacturerId())) {
             throw new BusinessException("批次不存在或无权限");
         }
+
+        // 校验传入的订单号是否与批次所属订单一致
         if (!batch.getOrderId().equals(orderId)) {
             throw new BusinessException("订单号与批次不匹配");
         }
+
+        // 根据订单号查询生产订单
         ProductionRequest order = productionRequestService.getOne(
                 new LambdaQueryWrapper<ProductionRequest>().eq(ProductionRequest::getOrderId, orderId));
+
+        // 默认取批次中绑定的 BOM 子件行 ID，用于后续设备记录保存
         Long bomItemIdForRecord = batch.getBomItemId();
+
+        // 默认设备类型使用传入值，后续可能根据 BOM 自动解析覆盖
         String resolvedDeviceType = deviceType;
 
+        // 如果订单存在且已关联 BOM，则按 BOM 子件逻辑校验和生成
         if (order != null && order.getBomId() != null) {
+            // 已关联 BOM 的订单，批次必须绑定具体的 BOM 子件行
             if (bomItemIdForRecord == null) {
                 throw new BusinessException("该批次未绑定 BOM 子件行，请新建「子件批次」后再生成 ECID");
             }
+
+            // 查询 BOM 子件明细
             BomItem item = bomItemMapper.selectById(bomItemIdForRecord);
+
+            // 校验 BOM 子件是否存在，且属于当前订单关联的 BOM
             if (item == null || !order.getBomId().equals(item.getBomId())) {
                 throw new BusinessException("BOM 明细行无效");
             }
+
+            // 获取订单数量，为空时按 0 处理
             int orderQty = order.getQuantity() == null ? 0 : order.getQuantity();
+
+            // 获取该子件单套用量，小于 1 或为空时默认按 1 处理
             int lineUse = item.getQuantity() == null || item.getQuantity() < 1 ? 1 : item.getQuantity();
+
+            // 该子件允许生成的最大设备数量 = 订单数量 × 子件用量
             int lineCap = orderQty * lineUse;
+
             if (lineCap > 0) {
+                // 统计当前订单、当前制造商、当前 BOM 子件下已生成的设备记录数量
                 long lineExisting = count(new LambdaQueryWrapper<DeviceRecord>()
                         .eq(DeviceRecord::getOrderId, orderId)
                         .eq(DeviceRecord::getManufacturerId, manufacturerId)
                         .eq(DeviceRecord::getBomItemId, bomItemIdForRecord));
+
+                // 校验本次生成后是否超出该子件的需求上限
                 if (lineExisting + qty > lineCap) {
                     throw new BusinessException(
                             "该子件 ECID 数量将超过订单需求（上限 " + lineCap + "，已有 " + lineExisting + "）");
                 }
             }
+
+            // 根据 BOM 子件信息自动解析设备类型
             resolvedDeviceType = deviceTypeFromBomItem(item);
         } else {
+            // 如果订单未关联 BOM，则设备记录中不保存 BOM 子件行 ID
             bomItemIdForRecord = null;
+
+            // 此时必须由外部传入设备类型
             if (!StringUtils.hasText(deviceType)) {
                 throw new BusinessException("请输入设备类型");
             }
+
+            // 去除设备类型前后空格
             resolvedDeviceType = deviceType.trim();
         }
 
+        // 如果批次设置了计划数量，则生成的设备总数不能超过该计划数量
         if (batch.getPlannedQty() != null && batch.getPlannedQty() > 0) {
+            // 统计该批次下已经生成的设备数量
             long existing = count(new LambdaQueryWrapper<DeviceRecord>()
                     .eq(DeviceRecord::getBatchId, batchId));
+
+            // 校验本次生成后是否超过批次计划数量
             if (existing + qty > batch.getPlannedQty()) {
                 throw new BusinessException(
                         "本批次设备数量将超过计划数量（计划 " + batch.getPlannedQty() + "，已有 " + existing + "）");
             }
         }
+
+        // 生成当天日期字符串，用于拼接 ECID
         String dateStr = LocalDate.now().format(DATE_FMT);
+
+        // 生成制造商编码，格式示例：M0001
         String mfCode = "M" + String.format("%04d", manufacturerId % 10000);
-        // ECID 序号按「制造商 + 当天日期」全局递增，不能仅按批次计数，否则多批次同日会重复
+
+        // ECID 序号按“制造商 + 日期”维度全局递增，避免同一制造商当天不同批次出现重复编号
         String ecidPrefix = "ECID-" + mfCode + "-" + dateStr + "-";
+
+        // 查询当前制造商当天已有 ECID 的最大序号
         int maxSeq = list(new LambdaQueryWrapper<DeviceRecord>()
                 .eq(DeviceRecord::getManufacturerId, manufacturerId)
                 .likeRight(DeviceRecord::getEcid, ecidPrefix))
@@ -115,17 +160,27 @@ public class DeviceRecordServiceImpl
                 .mapToInt(r -> parseEcidSeq(r.getEcid(), ecidPrefix))
                 .max()
                 .orElse(0);
+
+        // 本次生成的起始序号 = 当前最大序号 + 1
         int startSeq = maxSeq + 1;
 
+        // 用于保存设备记录对象和最终返回的 ECID 编号列表
         List<DeviceRecord> records = new ArrayList<>(qty);
         List<String> ecids = new ArrayList<>(qty);
+
+        // 统一记录生产时间
         LocalDateTime now = LocalDateTime.now();
 
+        // 按数量循环生成 ECID 和设备记录
         for (int i = 0; i < qty; i++) {
+            // 生成 6 位递增序号
             String seq = String.format("%06d", startSeq + i);
+
+            // 拼接完整 ECID
             String ecid = "ECID-" + mfCode + "-" + dateStr + "-" + seq;
             ecids.add(ecid);
 
+            // 构造设备记录对象
             DeviceRecord record = new DeviceRecord()
                     .setEcid(ecid)
                     .setOrderId(orderId)
@@ -139,9 +194,14 @@ public class DeviceRecordServiceImpl
                     .setReleasedToAssembler(0);
             records.add(record);
         }
-        //持久化设备记录列表
+
+        // 批量持久化设备记录
         saveBatch(records);
+
+        // 根据设备记录数量刷新批次已完成数量
         productionBatchService.refreshCompletedQtyFromDevices(batchId);
+
+        // 返回本次生成的 ECID 列表
         return ecids;
     }
 
@@ -265,34 +325,51 @@ public class DeviceRecordServiceImpl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean registerOnChain(List<Long> ids) {
-        //查询设备记录列表
+        // 根据设备记录 ID 集合查询对应的设备记录列表
         List<DeviceRecord> records = listByIds(ids);
-        //如果设备记录状态为rejected则收集ECID并抛异常
+
+        // 先筛选出状态为 REJECTED（质检不合格）的设备，收集其 ECID
         List<String> rejectedEcids = records.stream()
                 .filter(r -> Constants.REJECTED.equals(r.getStatus()))
                 .map(DeviceRecord::getEcid)
                 .collect(Collectors.toList());
+
+        // 质检不合格的设备不允许执行上链注册
         if (!rejectedEcids.isEmpty()) {
             throw new BusinessException(
                     "质检不合格的设备不能上链注册，请先处理或取消勾选：" + String.join("、", rejectedEcids));
         }
+
+        // 逐条校验设备记录是否满足上链注册条件
         for (DeviceRecord record : records) {
+            // 只有质检合格（QC_PASS）的设备才允许上链注册
             if (!Constants.QC_PASS.equals(record.getStatus())) {
                 throw new BusinessException("仅质检合格（QC_PASS）的设备可上链注册，请先完成质检: " + record.getEcid());
             }
+
+            // 上链前必须已经绑定质检报告哈希
             if (!StringUtils.hasText(record.getTestReportHash())) {
                 throw new BusinessException("设备未绑定质检报告哈希，请先上传检测报告后再注册: " + record.getEcid());
             }
+
+            // 已完成上链注册的设备不允许重复提交
             if (record.getChainRegistered() != null && record.getChainRegistered() == 1) {
                 throw new BusinessException("设备已上链注册，请勿重复提交: " + record.getEcid());
             }
         }
+
+        // 逐条执行设备上链注册
         for (DeviceRecord record : records) {
+            // 拼接上链锚定内容，包含设备、订单、批次、制造商和 BOM 子件信息
             String payload = record.getEcid() + "|" + record.getOrderId() + "|"
                     + record.getBatchId() + "|" + record.getManufacturerId() + "|"
                     + (record.getBomItemId() == null ? "" : record.getBomItemId());
+
+            // 调用区块链锚定服务，生成交易哈希
             String txHash = blockchainAnchorService.anchor(
                     "DEVICE_REGISTER", HashUtil.sha256Hex(payload));
+
+            // 调用智能合约，将设备核心信息正式注册上链
             smartContractInvokeService.registerDeviceRecord(
                     record.getEcid(),
                     record.getOrderId(),
@@ -301,26 +378,37 @@ public class DeviceRecordServiceImpl
                     record.getTestReportHash(),
                     Constants.QC_PASS
             );
-            //设置订单记录为已注册，并设置交易哈希
+
+            // 更新设备记录状态：标记为已上链，并保存交易哈希
             record.setChainRegistered(1);
             record.setTxHash(txHash);
+
+            // 理论上前面已校验为 QC_PASS，这里再次兜底修正状态
             if (!Constants.QC_PASS.equals(record.getStatus())) {
                 record.setStatus(Constants.QC_PASS);
             }
         }
-        //更新数据库记录
+
+        // 批量更新数据库中的设备记录
         boolean ok = updateBatchById(records);
+
+        // 如果更新成功，则尝试检查这些设备所属批次是否可自动完工
         if (ok) {
             Map<String, Long> batchToManufacturer = new LinkedHashMap<>();
             for (DeviceRecord r : records) {
+                // 收集批次ID与制造商ID的映射，避免同一批次重复处理
                 if (StringUtils.hasText(r.getBatchId())) {
                     batchToManufacturer.putIfAbsent(r.getBatchId(), r.getManufacturerId());
                 }
             }
+
+            // 对每个涉及的批次尝试执行自动完工判断
             for (Map.Entry<String, Long> e : batchToManufacturer.entrySet()) {
                 productionBatchService.tryAutoCompleteBatch(e.getKey(), e.getValue());
             }
         }
+
+        // 返回数据库更新结果
         return ok;
     }
 
