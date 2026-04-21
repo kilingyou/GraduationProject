@@ -38,6 +38,7 @@ public class AssemblyController {
     private final AssemblyRecordService assemblyRecordService;
     private final ProductionRequestService productionRequestService;
 
+    //创建组装批次
     @PostMapping("/batch")
     public Result<AssemblyBatch> createBatch(@RequestBody AssemblyBatch batch) {
         LoginUser loginUser = getCurrentUser();
@@ -76,7 +77,7 @@ public class AssemblyController {
     }
 
     /**
-     * 标准创建：校验来料 ECID、批次归属、SN 唯一等。
+     * 创建组装记录
      */
     @PostMapping("/record")
     public Result<AssemblyRecord> createRecord(@RequestBody AssemblyRecordCreateRequest request) {

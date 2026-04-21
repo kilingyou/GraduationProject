@@ -26,6 +26,11 @@ public class IntakeController {
 
     private final AssemblerIntakeService assemblerIntakeService;
 
+    /**
+     * 根据ecid校验合法性
+     * @param body ecid
+     * @return
+     */
     @PostMapping("/scan")
     public Result<IntakeVerifyResult> scan(@RequestBody Map<String, String> body) {
         String ecid = body.get("ecid");

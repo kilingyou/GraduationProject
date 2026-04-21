@@ -80,9 +80,18 @@ public class AssemblyRecordServiceImpl
         return record;
     }
 
+    /**
+     * 根据前端提交的组装请求创建一条组装记录：校验批次与部件、上链锚定与合约调用、
+     * 持久化组装记录、更新部件设备状态与批次完成进度。
+     *
+     * @param request      组装参数（批次号、ECID 列表、固件版本、可选 SN 等）
+     * @param assemblerId  当前操作方组装商 ID，用于权限与归属
+     * @return 已保存并落链后的组装记录
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AssemblyRecord createFromRequest(AssemblyRecordCreateRequest request, Long assemblerId) {
+        // 必填项：批次、至少一个 ECID、固件版本
         if (request == null || !StringUtils.hasText(request.getBatchNo())) {
             throw new BusinessException("请选择组装批次");
         }
@@ -92,6 +101,7 @@ public class AssemblyRecordServiceImpl
         if (!StringUtils.hasText(request.getFirmwareVersion())) {
             throw new BusinessException("请填写固件/系统版本");
         }
+        // 批次须存在且属于当前组装商；未完成数量不得超过计划量
         AssemblyBatch batch = assemblyBatchService.getOne(new LambdaQueryWrapper<AssemblyBatch>()
                 .eq(AssemblyBatch::getBatchNo, request.getBatchNo().trim())
                 .eq(AssemblyBatch::getAssemblerId, assemblerId));
@@ -103,6 +113,7 @@ public class AssemblyRecordServiceImpl
             throw new BusinessException("该批次已达到计划组装数量上限");
         }
 
+        // 规范化 ECID 并去重
         List<String> ecids = request.getEcidList().stream()
                 .filter(StringUtils::hasText)
                 .map(String::trim)
@@ -110,6 +121,7 @@ public class AssemblyRecordServiceImpl
         if (ecids.size() != new HashSet<>(ecids).size()) {
             throw new BusinessException("ECID 列表存在重复");
         }
+        // 每个 ECID 须通过组装前校验（入库/归属等业务规则）
         for (String ecid : ecids) {
             IntakeVerifyResult v = assemblerIntakeService.verifyEcidForAssembly(ecid, assemblerId);
             if (!IntakeVerifyResult.PASS.equals(v.getStatus())) {
@@ -117,6 +129,7 @@ public class AssemblyRecordServiceImpl
             }
         }
         validateSameOrderBomKit(ecids);
+        // 若批次绑定生产订单，则部件订单须与批次一致（以首个 ECID 对应设备为探针）
         if (StringUtils.hasText(batch.getOrderId())) {
             DeviceRecord probe = deviceRecordService.getOne(new LambdaQueryWrapper<DeviceRecord>()
                     .eq(DeviceRecord::getEcid, ecids.get(0)));
@@ -125,6 +138,7 @@ public class AssemblyRecordServiceImpl
             }
         }
 
+        // ECID 列表存库为 JSON；用户指定 SN 时需查重
         String ecidJson;
         try {
             ecidJson = objectMapper.writeValueAsString(ecids);
@@ -132,6 +146,7 @@ public class AssemblyRecordServiceImpl
             throw new BusinessException("ECID 列表序列化失败");
         }
 
+        //生成SN
         String sn = StringUtils.hasText(request.getSn()) ? request.getSn().trim() : generateSn();
         if (StringUtils.hasText(request.getSn())) {
             long exists = count(new LambdaQueryWrapper<AssemblyRecord>().eq(AssemblyRecord::getSn, sn));
@@ -140,6 +155,7 @@ public class AssemblyRecordServiceImpl
             }
         }
 
+        // 组装记录实体：状态已组装，链上登记标记后续可单独处理
         AssemblyRecord record = new AssemblyRecord()
                 .setSn(sn)
                 .setAssemblyBatchNo(batch.getBatchNo())
@@ -150,6 +166,7 @@ public class AssemblyRecordServiceImpl
                 .setStatus("ASSEMBLED")
                 .setChainRegistered(0)
                 .setAssemblyTime(LocalDateTime.now());
+        // 链下摘要上链锚定 + 智能合约写入组装主数据、逐 ECID 绑定 SN
         String anchorPayload = sn + "|" + ecidJson + "|" + assemblerId;
         record.setAssemblyTxHash(blockchainAnchorService.anchor("ASSEMBLY_CREATE", HashUtil.sha256Hex(anchorPayload)));
         smartContractInvokeService.createAssemblyRecord(
@@ -164,10 +181,12 @@ public class AssemblyRecordServiceImpl
         }
         save(record);
 
+        // 参与组装的部件在设备台账中标记为已组装
         deviceRecordService.update(new LambdaUpdateWrapper<DeviceRecord>()
                 .in(DeviceRecord::getEcid, ecids)
                 .set(DeviceRecord::getStatus, Constants.ASSEMBLED));
 
+        // 批次完成数 +1；达计划量则完结，否则进入/保持进行中
         int done = batch.getCompletedQty() == null ? 0 : batch.getCompletedQty();
         batch.setCompletedQty(done + 1);
         if (batch.getPlannedQty() != null && batch.getCompletedQty() >= batch.getPlannedQty()) {
