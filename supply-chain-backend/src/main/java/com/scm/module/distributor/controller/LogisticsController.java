@@ -95,15 +95,27 @@ public class LogisticsController {
         return Result.ok(list);
     }
 
+
+    /**
+     * 收货确认接口：
+     * 支持按 transferId、trackingNumber 或 SN 任一条件定位流转记录并完成签收。
+     *
+     * @param req 收货请求体，需至少包含 transferId、trackingNumber、sn 之一
+     * @return 收货确认后的物流流转记录
+     */
     @PostMapping("/receive")
     public Result<TransferEvent> receive(@RequestBody LogisticsReceiveRequest req) {
+        // 获取当前登录用户，作为收货操作发起人
         LoginUser u = getCurrentUser();
+        // 请求体不能为空
         if (req == null) {
             return Result.fail("请求体不能为空");
         }
+        // 至少提供一种定位条件：transferId / trackingNumber / sn
         if (req.getTransferId() == null && !StringUtils.hasText(req.getTrackingNumber()) && !StringUtils.hasText(req.getSn())) {
             return Result.fail("请提供 transferId、trackingNumber 或 sn");
         }
+        // 调用服务层执行收货并更新流转状态
         TransferEvent updated = transferEventService.receiveTransfer(
                 u.getUserId(), req.getTransferId(), req.getTrackingNumber(), req.getSn());
         return Result.ok(updated);

@@ -31,6 +31,16 @@ public class AssemblerQualityController {
     private final AssemblyRecordService assemblyRecordService;
     private final EvidenceStorageService evidenceStorageService;
 
+    /**
+     * 上传质检报告并写入组装记录。
+     * 支持按单个 SN、整批次、SN 列表三种目标范围写入同一份报告结果。
+     *
+     * @param file       报告文件（必填，按 multipart/form-data 上传）
+     * @param targetType 写入目标类型：SN / BATCH / MULTI_SN
+     * @param targetId   目标标识：SN、批次号或 SN 文本列表
+     * @param result     质检结论（如 PASS/FAIL）
+     * @return 写入结果；批量场景会返回成功/失败明细
+     */
     @PostMapping(value = "/report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<?> uploadReport(
             @RequestPart("file") MultipartFile file,
@@ -38,12 +48,15 @@ public class AssemblerQualityController {
             @RequestParam String targetId,
             @RequestParam String result) throws IOException {
         LoginUser loginUser = getCurrentUser();
+        // 基础校验：必须上传文件
         if (file == null || file.isEmpty()) {
             return Result.fail("请上传报告文件");
         }
+        // 先落存证服务，拿到文件哈希/IPFS CID/链上交易哈希等信息
         EvidenceStorageService.StoredEvidence ev = evidenceStorageService.store(
                 file.getBytes(), file.getOriginalFilename(), "ASSEMBLY_QC_REPORT");
 
+        // 单 SN 写入：校验记录存在且归属当前组装商
         if ("SN".equalsIgnoreCase(targetType)) {
             AssemblyRecord record = assemblyRecordService.listBySn(targetId);
             if (record == null) {
@@ -56,6 +69,7 @@ public class AssemblerQualityController {
             assemblyRecordService.updateById(record);
             return Result.ok(record);
         }
+        // 按批次写入：对当前组装商在该批次下的所有整机写入同一结论
         if ("BATCH".equalsIgnoreCase(targetType)) {
             if (!StringUtils.hasText(targetId)) {
                 return Result.fail("请输入批次号");
@@ -75,6 +89,7 @@ public class AssemblerQualityController {
             AssemblyQcBatchOutcome out = new AssemblyQcBatchOutcome().setUpdated(records.size());
             return Result.ok("已对该批次 " + records.size() + " 台整机写入同一质检结果", out);
         }
+        // 多 SN 写入：支持换行/逗号等分隔，返回部分失败明细
         if ("MULTI_SN".equalsIgnoreCase(targetType)) {
             AssemblyQcBatchOutcome outcome = applyReportToSnList(loginUser.getUserId(), targetId, ev, result);
             if (outcome.getUpdated() == 0) {
@@ -86,6 +101,7 @@ public class AssemblerQualityController {
                     + (outcome.getFailed().isEmpty() ? "" : "，部分失败见返回详情");
             return Result.ok(msg, outcome);
         }
+        // 兜底：不支持的目标类型
         return Result.fail("不支持的 targetType: " + targetType);
     }
 

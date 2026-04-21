@@ -16,6 +16,11 @@ public class TraceController {
     private final TraceService traceService;
     private final EvidenceStorageService evidenceStorageService;
 
+    /**
+     * 溯源接口
+     * @param sn
+     * @return
+     */
     @GetMapping("/{sn}")
     public Result<Map<String, Object>> trace(@PathVariable String sn) {
         Map<String, Object> traceInfo = traceService.traceProduct(sn);

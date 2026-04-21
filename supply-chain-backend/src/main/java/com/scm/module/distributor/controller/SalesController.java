@@ -25,6 +25,20 @@ public class SalesController {
 
     private final SalesRecordService salesRecordService;
 
+    /**
+     * 销售登记接口（支持发票附件上传）。
+     * 入参中的 saleTime 需为 ISO-8601 时间字符串，anonymous 支持 true/1。
+     *
+     * @param sn 产品唯一序列号
+     * @param saleTime 销售时间（ISO-8601 字符串，可选）
+     * @param customerName 客户姓名（可选）
+     * @param customerPhone 客户手机号（可选）
+     * @param anonymous 是否匿名销售（true/1 表示匿名）
+     * @param customerSegment 客户分层标签（可选）
+     * @param invoice 发票附件（可选）
+     * @return 销售登记结果
+     * @throws IOException 文件处理异常
+     */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<SalesRecord> registerSale(
             @RequestParam String sn,
@@ -34,12 +48,16 @@ public class SalesController {
             @RequestParam(required = false) String anonymous,
             @RequestParam(required = false) String customerSegment,
             @RequestPart(value = "invoice", required = false) MultipartFile invoice) throws IOException {
+        // 获取当前登录用户，作为销售登记的操作人
         LoginUser loginUser = getCurrentUser();
         LocalDateTime st = null;
+        // 解析可选销售时间（ISO-8601）并转换为系统时区时间
         if (saleTime != null && !saleTime.trim().isEmpty()) {
             st = LocalDateTime.ofInstant(Instant.parse(saleTime), ZoneId.systemDefault());
         }
+        // 匿名标记兼容 true/1 两种传参格式
         boolean anon = "true".equalsIgnoreCase(anonymous) || "1".equals(anonymous);
+        // 调用服务层完成销售登记（含可选发票文件处理）
         SalesRecord created = salesRecordService.registerSale(sn, st, customerName, customerPhone, invoice,
                 loginUser.getUserId(), anon, customerSegment);
         return Result.ok(created);

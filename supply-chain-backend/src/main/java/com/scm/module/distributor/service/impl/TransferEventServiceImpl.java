@@ -117,21 +117,35 @@ public class TransferEventServiceImpl
         return out;
     }
 
+    /**
+     * 收货确认：按 transferId、物流单号或 SN 定位当前收货方待签收记录并批量签收。
+     *
+     * @param receiverId 收货方用户 ID
+     * @param transferId 流转记录 ID（可选）
+     * @param trackingNumber 物流单号（可选）
+     * @param sn 产品 SN（可选）
+     * @return 首条被签收的流转记录
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TransferEvent receiveTransfer(Long receiverId, Long transferId, String trackingNumber, String sn) {
+        // 构建待收货查询：仅查询当前收货方名下、状态为待处理/在途的物流记录
         LambdaQueryWrapper<TransferEvent> w = new LambdaQueryWrapper<TransferEvent>()
                 .eq(TransferEvent::getReceiverId, receiverId)
                 .in(TransferEvent::getStatus, "PENDING", "IN_TRANSIT");
+        // 可选条件：按物流流转记录 ID 精确定位
         if (transferId != null) {
             w.eq(TransferEvent::getId, transferId);
         }
+        // 可选条件：按物流单号过滤（去除首尾空格）
         if (StringUtils.hasText(trackingNumber)) {
             w.eq(TransferEvent::getTrackingNumber, trackingNumber.trim());
         }
+        // 可选条件：按 SN 过滤（去除首尾空格）
         if (StringUtils.hasText(sn)) {
             w.eq(TransferEvent::getSn, sn.trim());
         }
+        // 按主键升序，确保处理顺序稳定
         w.orderByAsc(TransferEvent::getId);
         List<TransferEvent> pending = list(w);
         if (pending.isEmpty()) {
@@ -139,22 +153,27 @@ public class TransferEventServiceImpl
         }
 
         LocalDateTime now = LocalDateTime.now();
+        // 保留首条记录作为接口返回值（兼容现有返回结构）
         TransferEvent first = null;
         for (TransferEvent te : pending) {
             if (first == null) {
                 first = te;
             }
+            // 物流签收后需同步更新对应组装记录（货权与库存状态）
             AssemblyRecord ar = assemblyRecordService.listBySn(te.getSn());
             if (ar == null) {
                 throw new BusinessException("组装记录异常，SN: " + te.getSn());
             }
+            // 标记物流记录已签收，并记录实际到达时间
             te.setStatus("RECEIVED");
             te.setActualArrival(now);
+            // 生成收货事件摘要并上链锚定，确保签收行为可追溯
             String recvPayload = te.getSn() + "|" + te.getTrackingNumber() + "|"
                     + te.getSenderId() + "|" + receiverId + "|RECEIVED|" + now;
             te.setReceiveTxHash(blockchainAnchorService.anchor(
                     "TRANSFER_RECEIVE", HashUtil.sha256Hex(recvPayload)));
             updateById(te);
+            // 同步货权归属与库存状态：收货方成为当前持有人
             ar.setCurrentHolderId(receiverId);
             ar.setStatus("IN_STOCK");
             assemblyRecordService.updateById(ar);

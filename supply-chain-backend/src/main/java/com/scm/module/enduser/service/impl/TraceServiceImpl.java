@@ -43,12 +43,21 @@ public class TraceServiceImpl implements TraceService {
     private final DesignDocumentService designDocumentService;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 按整机 SN 聚合溯源信息，返回装配、流转、销售及器件级追踪数据。
+     *
+     * @param sn 产品 SN
+     * @return 溯源结果 Map，包含告警信息与多维链路数据
+     */
     @Override
     public Map<String, Object> traceProduct(String sn) {
+        // 规范化 SN，避免前后空格导致查询不一致
         String qsn = sn != null ? sn.trim() : "";
+        // 使用有序 Map，保证前端展示字段顺序稳定
         Map<String, Object> trace = new LinkedHashMap<>();
         trace.put("sn", qsn);
 
+        // 查询整机装配记录并生成基础风险提示
         AssemblyRecord record = assemblyRecordService.listBySn(qsn);
         List<String> warnings = new ArrayList<>();
         if (record != null) {
@@ -57,23 +66,29 @@ public class TraceServiceImpl implements TraceService {
             trace.put("assemblyTime", record.getAssemblyTime());
             trace.put("firmwareVersion", record.getFirmwareVersion());
             trace.put("status", record.getStatus());
+            // 未完成链上登记时提示“信息仅供参考”
             if (record.getChainRegistered() == null || record.getChainRegistered() != 1) {
                 warnings.add("该整机装配映射尚未完成链上登记，溯源信息仅供参考");
             }
+            // 已报废产品给出流通风险提示
             if ("DECOMMISSIONED".equals(record.getStatus())) {
                 warnings.add("该产品已登记报废，请勿继续流通或使用");
             }
         } else {
+            // 无装配记录通常意味着伪造标识或系统尚未录入
             warnings.add("未查询到该 SN 的装配记录，可能为伪造标识或尚未录入系统");
         }
         trace.put("warnings", warnings);
 
+        // 聚合物流流转事件（发货/收货链路）
         List<TransferEvent> transfers = transferEventService.listBySn(qsn);
         trace.put("transferEvents", transfers);
 
+        // 聚合最近一次销售记录
         SalesRecord sale = salesRecordService.getLatestBySn(qsn);
         trace.put("salesRecord", sale);
 
+        // 基于装配记录中的 ECID 列表展开器件级溯源数据
         List<Map<String, Object>> deviceTraces = new ArrayList<>();
         if (record != null) {
             for (String ecid : parseEcids(record.getEcidList())) {
