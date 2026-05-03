@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scm.common.util.HashUtil;
 import com.scm.integration.blockchain.BlockchainAnchorService;
+import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.assembler.entity.AssemblyRecord;
 import com.scm.module.assembler.service.AssemblyRecordService;
 import com.scm.module.manufacturer.entity.DeviceRecord;
@@ -18,6 +19,8 @@ import com.scm.module.regulator.mapper.RecallNoticeMapper;
 import com.scm.module.regulator.service.RecallNoticeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -38,11 +41,13 @@ public class RecallNoticeServiceImpl
     private static final Random RANDOM = new Random();
 
     private final BlockchainAnchorService blockchainAnchorService;
+    private final SmartContractInvokeService smartContractInvokeService;
     private final DeviceRecordService deviceRecordService;
     private final AssemblyRecordService assemblyRecordService;
     private final ObjectMapper objectMapper;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public RecallNotice createNotice(RecallNotice notice) {
         if (notice.getNoticeNo() == null || notice.getNoticeNo().isEmpty()) {
             String dateStr = LocalDate.now().format(DATE_FMT);
@@ -69,6 +74,12 @@ public class RecallNoticeServiceImpl
                 + notice.getFaultSourceSn() + "|"
                 + notice.getFaultBatchId() + "|"
                 + (notice.getAffectedSns() != null ? notice.getAffectedSns() : "");
+
+        smartContractInvokeService.publishRecallNotice(notice.getNoticeNo(), notice.getAffectedSns());
+        if (StringUtils.hasText(notice.getFaultBatchId())) {
+            String reason = StringUtils.hasText(notice.getDisposalPlan()) ? notice.getDisposalPlan() : "BATCH_RECALL";
+            smartContractInvokeService.triggerBatchRecall(notice.getNoticeNo(), notice.getFaultBatchId(), reason);
+        }
 
         notice.setTxHash(blockchainAnchorService.anchor(
                 "RECALL_NOTICE",

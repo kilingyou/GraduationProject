@@ -125,6 +125,21 @@ public class SmartContractInvokeService {
         sendRequired("requestRecall", params);
     }
 
+    public void publishRecallNotice(String noticeNo, String affectedSnsJson) {
+        List<Object> params = new ArrayList<>();
+        params.add(empty(noticeNo));
+        params.add(empty(affectedSnsJson));
+        sendRequired("publishRecallNotice", params);
+    }
+
+    public void triggerBatchRecall(String noticeNo, String batchId, String reason) {
+        List<Object> params = new ArrayList<>();
+        params.add(empty(noticeNo));
+        params.add(empty(batchId));
+        params.add(empty(reason));
+        sendRequired("triggerBatchRecall", params);
+    }
+
     public void decommissionWithAgency(String sn, String disposalMethod, String agency) {
         List<Object> params = new ArrayList<>();
         params.add(empty(sn));

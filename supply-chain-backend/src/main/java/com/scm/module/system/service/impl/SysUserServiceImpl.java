@@ -113,15 +113,19 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             sysSupplierAuditMapper.insert(audit);
         }
         if (StringUtils.hasText(roleKey)) {
+            String roleKeyNorm = roleKey.trim().toLowerCase();
             SysRole role = sysRoleMapper.selectOne(new LambdaQueryWrapper<SysRole>()
-                    .eq(SysRole::getRoleKey, roleKey.trim().toLowerCase())
+                    .eq(SysRole::getRoleKey, roleKeyNorm)
                     .eq(SysRole::getStatus, 1)
                     .last("LIMIT 1"));
             if (role != null) {
                 //在“用户-角色关联表”里插入一条关系
                 baseMapper.insertUserRole(user.getId(), role.getId());
-                // 与 assignRole 一致：注册后立即把角色写入合约 roleOf，否则 signManufacturingAgreement 等 onlyRole 会 revert
-                contractRoleSyncService.syncUserRoleToChain(user.getId());
+                // 供应商角色在资质审核通过后再写链上 roleOf，避免“未审核先上链生效”；
+                // 其他角色保持注册后立即同步，满足 onlyRole 方法调用前置条件。
+                if (!"supplier".equals(roleKeyNorm)) {
+                    contractRoleSyncService.syncUserRoleToChain(user.getId());
+                }
             }
         }
     }
