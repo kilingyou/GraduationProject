@@ -28,6 +28,7 @@ public class SysSupplierAudit {
     private Long auditorId;
     private String auditOpinion;
     private LocalDateTime auditTime;
+    /** 准入/驳回对应的合约交易：通过为 {@code approveSupplier}，驳回为 {@code revokeSupplier}（无链上地址时可能为空）。 */
     private String txHash;
     @TableField(exist = false)
     private String licenseViewUrl;

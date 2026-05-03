@@ -21,7 +21,7 @@ export function downloadIntakeImportTemplate() {
   })
 }
 
-/** 与部件入库「验证通过」条件一致的可选 ECID（质检合格、已上链、已放行、未绑定整机）；params.orderId 按订单过滤 */
+/** 与部件入库「验证通过」条件一致的可选 ECID（质检合格、已上链、未绑定整机）；params.orderId 按订单过滤 */
 export function getAvailableIntakeEcids(params) {
   return request({ url: '/assembler/intake/available-ecids', method: 'get', params })
 }

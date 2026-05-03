@@ -4,8 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
-import com.scm.common.util.HashUtil;
-import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.manufacturer.entity.ManufacturingAgreement;
@@ -28,7 +26,6 @@ public class ManufacturerOrderAcceptanceServiceImpl implements ManufacturerOrder
     private final ProductionRequestService productionRequestService;
     private final ManufacturingAgreementService manufacturingAgreementService;
     private final EvidenceStorageService evidenceStorageService;
-    private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
 
     @Override
@@ -76,18 +73,12 @@ public class ManufacturerOrderAcceptanceServiceImpl implements ManufacturerOrder
             throw new BusinessException("该订单已定向给其他制造商");
         }
 
-        // 9) 将制造协议文件进行存证（如文件哈希、IPFS CID 等），形成可追溯证据
-        EvidenceStorageService.StoredEvidence ev = evidenceStorageService.store(
+        // 9) 协议文件存 IPFS + 文件哈希（不在此单独 anchor；链上凭据以 signManufacturingAgreement 为准）
+        EvidenceStorageService.StoredEvidence ev = evidenceStorageService.storeWithoutAnchor(
                 agreementFileBytes,
-                StringUtils.hasText(agreementFilename) ? agreementFilename : "agreement.pdf",
-                "MANUFACTURING_AGREEMENT_FILE");
+                StringUtils.hasText(agreementFilename) ? agreementFilename : "agreement.pdf");
 
-        // 10) 组装锚定载荷：订单号 + 制造商 + 最终报价 + 交期 + 协议文件哈希
-        //     该载荷会做 SHA-256 后上链，作为“本次接单协议”摘要凭证
-        String fileHashPart = StringUtils.hasText(ev.getFileHash()) ? ev.getFileHash() : "";
-        String payload = orderId + "|" + manufacturerUserId + "|" + finalPrice + "|" + deliveryDate + "|" + fileHashPart;
-
-        // 11) 构造并填充制造协议实体，准备持久化
+        // 10) 构造并填充制造协议实体，准备持久化
         ManufacturingAgreement agreement = new ManufacturingAgreement();
         agreement.setOrderId(orderId.trim());
         agreement.setManufacturerId(manufacturerUserId);
@@ -95,32 +86,24 @@ public class ManufacturerOrderAcceptanceServiceImpl implements ManufacturerOrder
         agreement.setDeliveryDate(deliveryDate);
         agreement.setAgreementHash(ev.getFileHash());
         agreement.setAgreementCid(ev.getIpfsCid());
-        // 12) 若传入制造商链上地址，则记录“签署人标识”
-        //     这里用 MANUFACTURER_ADDR: 前缀区分签名来源类型
+        // 11) 若传入制造商链上地址，则记录“签署人标识”
         if (StringUtils.hasText(manufacturerBlockchainAddr)) {
             agreement.setManufacturerSign("MANUFACTURER_ADDR:" + manufacturerBlockchainAddr.trim());
         }
 
-        // 13) 先更新数据库中的订单状态为“已接单”
-        //     该方法受事务保护，若后续步骤失败会整体回滚
+        // 12) 先更新数据库中的订单状态为“已接单”
         productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
                 .eq(ProductionRequest::getOrderId, orderId.trim())
                 .set(ProductionRequest::getStatus, Constants.ACCEPTED));
 
-        // 14) 将协议摘要做锚定上链，返回交易哈希 txHash（用于审计/追溯）
-        agreement.setTxHash(blockchainAnchorService.anchor(
-                "MANUFACTURING_AGREEMENT", HashUtil.sha256Hex(payload)));
-        // 15) 调用业务智能合约登记制造协议核心信息
-        //     包含：订单号、协议文件哈希、最终报价、交期
-        smartContractInvokeService.signManufacturingAgreement(
+        agreement.setTxHash(smartContractInvokeService.signManufacturingAgreement(
                 orderId.trim(),
                 agreement.getAgreementHash(),
                 finalPrice.toPlainString(),
-                deliveryDate);
-        // 16) 将订单链上状态同步为 ACCEPTED，确保链上链下状态一致
+                deliveryDate));
         smartContractInvokeService.updateProductionRequestStatus(orderId.trim(), Constants.ACCEPTED);
 
-        // 17) 持久化制造协议记录，并返回给调用方
+        // 13) 持久化制造协议记录，并返回给调用方
         manufacturingAgreementService.save(agreement);
         return agreement;
     }

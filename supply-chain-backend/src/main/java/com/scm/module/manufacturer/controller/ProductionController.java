@@ -32,7 +32,6 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -160,10 +159,6 @@ public class ProductionController {
                 .eq(DeviceRecord::getOrderId, oid)
                 .eq(DeviceRecord::getManufacturerId, mid)
                 .eq(DeviceRecord::getChainRegistered, 1)));
-        vo.setEcidReleasedToAssemblerCount(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
-                .eq(DeviceRecord::getOrderId, oid)
-                .eq(DeviceRecord::getManufacturerId, mid)
-                .eq(DeviceRecord::getReleasedToAssembler, 1)));
         vo.setEcidAssembledCount(deviceRecordService.count(new LambdaQueryWrapper<DeviceRecord>()
                 .eq(DeviceRecord::getOrderId, oid)
                 .eq(DeviceRecord::getManufacturerId, mid)
@@ -279,12 +274,11 @@ public class ProductionController {
             @RequestParam(required = false) String orderId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) Integer chainRegistered,
-            @RequestParam(required = false) Integer releasedToAssembler) {
+            @RequestParam(required = false) Integer chainRegistered) {
         LoginUser user = currentUser();
         Page<DeviceRecord> p = new Page<>(page, pageSize);
         IPage<DeviceRecord> raw = deviceRecordService.pageForManufacturer(
-                user.getUserId(), p, batchId, orderId, keyword, status, chainRegistered, releasedToAssembler);
+                user.getUserId(), p, batchId, orderId, keyword, status, chainRegistered);
         PageResult<DeviceRecord> pr = new PageResult<DeviceRecord>()
                 .setRecords(raw.getRecords())
                 .setTotal(raw.getTotal())
@@ -357,51 +351,18 @@ public class ProductionController {
         response.setHeader("Content-Disposition", "attachment;filename*=utf-8''" + fn);
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8))) {
             pw.write('\uFEFF');
-            pw.println("ecid,orderId,batchId,bomItemId,deviceType,status,chainRegistered,releasedToAssembler");
+            pw.println("ecid,orderId,batchId,bomItemId,deviceType,status,chainRegistered");
             for (DeviceRecord r : records) {
-                pw.printf("%s,%s,%s,%s,%s,%s,%s,%s%n",
+                pw.printf("%s,%s,%s,%s,%s,%s,%s%n",
                         csv(r.getEcid()),
                         csv(r.getOrderId()),
                         csv(r.getBatchId()),
                         r.getBomItemId() == null ? "" : String.valueOf(r.getBomItemId()),
                         csv(r.getDeviceType()),
                         csv(r.getStatus()),
-                        r.getChainRegistered() != null && r.getChainRegistered() == 1 ? "1" : "0",
-                        r.getReleasedToAssembler() != null && r.getReleasedToAssembler() == 1 ? "1" : "0");
+                        r.getChainRegistered() != null && r.getChainRegistered() == 1 ? "1" : "0");
             }
         }
-    }
-
-    /**
-     * 制造商放行：已质检合格且已链上的部件方可被组装商领用（发运/交接确认）。
-     * body: {@code batchId} 放行整批，或 {@code ecids} 字符串数组放行指定 ECID。
-     */
-    @PostMapping("/ecid/release-to-assembler")
-    public Result<Map<String, Object>> releaseToAssembler(@RequestBody Map<String, Object> body) {
-        LoginUser user = currentUser();
-        if (body == null) {
-            return Result.fail("请求体不能为空");
-        }
-        String batchId = body.get("batchId") != null ? String.valueOf(body.get("batchId")).trim() : "";
-        Object rawEcids = body.get("ecids");
-        int released;
-        if (StringUtils.hasText(batchId)) {
-            released = deviceRecordService.releasePartsToAssemblerByBatch(batchId, user.getUserId());
-        } else if (rawEcids instanceof List) {
-            List<?> raw = (List<?>) rawEcids;
-            List<String> ecids = new ArrayList<>();
-            for (Object o : raw) {
-                if (o != null && StringUtils.hasText(String.valueOf(o))) {
-                    ecids.add(String.valueOf(o).trim());
-                }
-            }
-            released = deviceRecordService.releasePartsToAssemblerByEcids(ecids, user.getUserId());
-        } else {
-            return Result.fail("请提供 batchId 或 ecids");
-        }
-        Map<String, Object> out = new HashMap<>();
-        out.put("released", released);
-        return Result.ok(out);
     }
 
     private static String csv(String s) {

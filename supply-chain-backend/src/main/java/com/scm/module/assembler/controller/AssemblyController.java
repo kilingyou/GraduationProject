@@ -204,7 +204,7 @@ public class AssemblyController {
     public Result<Boolean> registerOnChain(@PathVariable Long id) {
         LoginUser loginUser = getCurrentUser();
         boolean success = assemblyRecordService.registerOnChainForAssembler(id, loginUser.getUserId());
-        return success ? Result.ok(true) : Result.fail("上链失败");
+        return success ? Result.ok(true) : Result.fail("更新失败");
     }
 
     private LoginUser getCurrentUser() {

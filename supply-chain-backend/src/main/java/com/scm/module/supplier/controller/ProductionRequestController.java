@@ -74,7 +74,7 @@ public class ProductionRequestController {
     }
 
     /**
-     * 指定组装商领用本单下已放行部件；body 可选 {@code assemblerUserId}，不传或 null 表示清除限制。
+     * 指定组装商领用本单下部件；body 可选 {@code assemblerUserId}，不传或 null 表示清除限制。
      */
     @PostMapping("/{id}/designate-assembler")
     public Result<Void> designateAssembler(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {

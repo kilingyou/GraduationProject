@@ -1,14 +1,11 @@
 package com.scm.module.manufacturer.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
-import com.scm.common.util.HashUtil;
-import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.manufacturer.dto.DeviceRegisterRequest;
 import com.scm.module.manufacturer.entity.DeviceRecord;
@@ -29,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +45,6 @@ public class DeviceRecordServiceImpl
     private final ProductionBatchService productionBatchService;
     private final ProductionRequestService productionRequestService;
     private final BomItemMapper bomItemMapper;
-    private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
 
     // 批量生成 ECID
@@ -190,8 +187,7 @@ public class DeviceRecordServiceImpl
                     .setDeviceType(resolvedDeviceType)
                     .setManufactureTime(now)
                     .setStatus("PRODUCED")
-                    .setChainRegistered(0)
-                    .setReleasedToAssembler(0);
+                    .setChainRegistered(0);
             records.add(record);
         }
 
@@ -242,8 +238,7 @@ public class DeviceRecordServiceImpl
             String orderId,
             String keyword,
             String status,
-            Integer chainRegistered,
-            Integer releasedToAssembler) {
+            Integer chainRegistered) {
         String orderIdEq = StringUtils.hasText(orderId) ? orderId.trim() : null;
         LambdaQueryWrapper<DeviceRecord> w = new LambdaQueryWrapper<DeviceRecord>()
                 .eq(DeviceRecord::getManufacturerId, manufacturerId)
@@ -264,13 +259,6 @@ public class DeviceRecordServiceImpl
                 w.eq(DeviceRecord::getChainRegistered, 1);
             } else if (chainRegistered == 0) {
                 w.and(q -> q.isNull(DeviceRecord::getChainRegistered).or().ne(DeviceRecord::getChainRegistered, 1));
-            }
-        }
-        if (releasedToAssembler != null) {
-            if (releasedToAssembler == 1) {
-                w.eq(DeviceRecord::getReleasedToAssembler, 1);
-            } else if (releasedToAssembler == 0) {
-                w.and(q -> q.isNull(DeviceRecord::getReleasedToAssembler).or().ne(DeviceRecord::getReleasedToAssembler, 1));
             }
         }
         w.orderByDesc(DeviceRecord::getCreateTime);
@@ -325,8 +313,17 @@ public class DeviceRecordServiceImpl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean registerOnChain(List<Long> ids) {
-        // 根据设备记录 ID 集合查询对应的设备记录列表
-        List<DeviceRecord> records = listByIds(ids);
+        if (ids == null || ids.isEmpty()) {
+            return false;
+        }
+        // 根据设备记录 ID 集合查询对应的设备记录列表（去重，避免重复上链同一 ECID）
+        List<Long> distinctIds = ids.stream().distinct().collect(Collectors.toList());
+        List<DeviceRecord> records = listByIds(distinctIds);
+        Set<Long> requestedIds = new HashSet<>(ids);
+        Set<Long> foundIds = records.stream().map(DeviceRecord::getId).collect(Collectors.toSet());
+        if (!foundIds.equals(requestedIds)) {
+            throw new BusinessException("部分设备记录不存在，请刷新后重试");
+        }
 
         // 先筛选出状态为 REJECTED（质检不合格）的设备，收集其 ECID
         List<String> rejectedEcids = records.stream()
@@ -358,19 +355,9 @@ public class DeviceRecordServiceImpl
             }
         }
 
-        // 逐条执行设备上链注册
+        // 逐条执行设备上链注册（仅合约 registerDeviceRecord 一笔交易，txHash 为合约交易哈希）
         for (DeviceRecord record : records) {
-            // 拼接上链锚定内容，包含设备、订单、批次、制造商和 BOM 子件信息
-            String payload = record.getEcid() + "|" + record.getOrderId() + "|"
-                    + record.getBatchId() + "|" + record.getManufacturerId() + "|"
-                    + (record.getBomItemId() == null ? "" : record.getBomItemId());
-
-            // 调用区块链锚定服务，生成交易哈希
-            String txHash = blockchainAnchorService.anchor(
-                    "DEVICE_REGISTER", HashUtil.sha256Hex(payload));
-
-            // 调用智能合约，将设备核心信息正式注册上链
-            smartContractInvokeService.registerDeviceRecord(
+            String txHash = smartContractInvokeService.registerDeviceRecord(
                     record.getEcid(),
                     record.getOrderId(),
                     record.getBatchId(),
@@ -379,7 +366,6 @@ public class DeviceRecordServiceImpl
                     Constants.QC_PASS
             );
 
-            // 更新设备记录状态：标记为已上链，并保存交易哈希
             record.setChainRegistered(1);
             record.setTxHash(txHash);
 
@@ -420,15 +406,32 @@ public class DeviceRecordServiceImpl
             if (request.getEcids() == null || request.getEcids().isEmpty()) {
                 return false;
             }
-            List<DeviceRecord> recs = list(new LambdaQueryWrapper<DeviceRecord>()
-                    .in(DeviceRecord::getEcid, request.getEcids())
-                    .eq(DeviceRecord::getManufacturerId, manufacturerId));
-            ids = recs.stream().map(DeviceRecord::getId).collect(Collectors.toList());
-            if (ids.isEmpty()) {
-                throw new BusinessException("未找到可注册的设备");
+            Set<String> wantedEcids = request.getEcids().stream()
+                    .filter(StringUtils::hasText)
+                    .map(String::trim)
+                    .collect(Collectors.toSet());
+            if (wantedEcids.isEmpty()) {
+                return false;
             }
+            List<DeviceRecord> recs = list(new LambdaQueryWrapper<DeviceRecord>()
+                    .in(DeviceRecord::getEcid, wantedEcids)
+                    .eq(DeviceRecord::getManufacturerId, manufacturerId));
+            Set<String> foundEcids = recs.stream()
+                    .map(DeviceRecord::getEcid)
+                    .filter(StringUtils::hasText)
+                    .map(String::trim)
+                    .collect(Collectors.toSet());
+            if (!foundEcids.equals(wantedEcids)) {
+                throw new BusinessException("部分 ECID 不存在或无权操作");
+            }
+            ids = recs.stream().map(DeviceRecord::getId).collect(Collectors.toList());
         } else {
             List<DeviceRecord> recs = listByIds(ids);
+            Set<Long> requested = new HashSet<>(ids);
+            Set<Long> found = recs.stream().map(DeviceRecord::getId).collect(Collectors.toSet());
+            if (!found.equals(requested)) {
+                throw new BusinessException("部分设备记录不存在");
+            }
             for (DeviceRecord r : recs) {
                 if (!manufacturerId.equals(r.getManufacturerId())) {
                     throw new BusinessException("存在无权限的设备记录");
@@ -436,67 +439,5 @@ public class DeviceRecordServiceImpl
             }
         }
         return registerOnChain(ids);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int releasePartsToAssemblerByEcids(List<String> ecids, Long manufacturerId) {
-        if (ecids == null || ecids.isEmpty()) {
-            return 0;
-        }
-        int n = 0;
-        for (String raw : ecids) {
-            if (!StringUtils.hasText(raw)) {
-                continue;
-            }
-            DeviceRecord d = getOne(new LambdaQueryWrapper<DeviceRecord>()
-                    .eq(DeviceRecord::getEcid, raw.trim()));
-            if (!canReleaseToAssembler(d, manufacturerId)) {
-                continue;
-            }
-            update(new LambdaUpdateWrapper<DeviceRecord>()
-                    .eq(DeviceRecord::getId, d.getId())
-                    .set(DeviceRecord::getReleasedToAssembler, 1));
-            n++;
-        }
-        return n;
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int releasePartsToAssemblerByBatch(String batchId, Long manufacturerId) {
-        if (!StringUtils.hasText(batchId)) {
-            return 0;
-        }
-        List<DeviceRecord> rows = list(new LambdaQueryWrapper<DeviceRecord>()
-                .eq(DeviceRecord::getBatchId, batchId.trim())
-                .eq(DeviceRecord::getManufacturerId, manufacturerId));
-        int n = 0;
-        for (DeviceRecord d : rows) {
-            if (!canReleaseToAssembler(d, manufacturerId)) {
-                continue;
-            }
-            update(new LambdaUpdateWrapper<DeviceRecord>()
-                    .eq(DeviceRecord::getId, d.getId())
-                    .set(DeviceRecord::getReleasedToAssembler, 1));
-            n++;
-        }
-        return n;
-    }
-
-    private static boolean canReleaseToAssembler(DeviceRecord d, Long manufacturerId) {
-        if (d == null || manufacturerId == null || !manufacturerId.equals(d.getManufacturerId())) {
-            return false;
-        }
-        if (!Constants.QC_PASS.equals(d.getStatus())) {
-            return false;
-        }
-        if (d.getChainRegistered() == null || d.getChainRegistered() != 1) {
-            return false;
-        }
-        if (Constants.ASSEMBLED.equals(d.getStatus())) {
-            return false;
-        }
-        return d.getReleasedToAssembler() == null || d.getReleasedToAssembler() != 1;
     }
 }

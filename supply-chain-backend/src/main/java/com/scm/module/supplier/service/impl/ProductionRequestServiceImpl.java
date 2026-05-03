@@ -8,7 +8,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
-import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.supplier.entity.Bom;
 import com.scm.module.supplier.entity.DesignDocument;
@@ -37,7 +36,6 @@ import java.util.UUID;
 public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestMapper, ProductionRequest>
         implements ProductionRequestService {
 
-    private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
     private final SysSupplierAuditMapper sysSupplierAuditMapper;
     private final SysUserMapper sysUserMapper;
@@ -84,19 +82,12 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         // 生成业务订单号（去掉 UUID 中的 '-'，得到更紧凑的字符串）
         request.setOrderId(UUID.randomUUID().toString().replace("-", ""));
         // 新建订单初始状态：待接单
-        request.setStatus("PENDING_ACCEPTANCE");
+        request.setStatus(Constants.PENDING_ACCEPTANCE);
         // 先落库，获得数据库主键及持久化快照
         save(request);
         // 对质量要求文本做哈希，避免将原文直接上链（减小链上数据、保护敏感内容）
         String qualityReqHash = hashQualityRequirementText(request.getQualityRequirement());
-        // 组织“锚定”载荷（订单号 + 供应商ID），作为业务凭据摘要来源
-        String anchorPayload = request.getOrderId() + "|" + request.getSupplierId();
-        // 通用锚定上链：业务类型为 PRODUCTION_ORDER
-        // 链上仅写入锚定摘要（SHA-256），返回交易哈希 txHash 供后续审计追溯
-        request.setTxHash(blockchainAnchorService.anchor("PRODUCTION_ORDER", HashUtil.sha256Hex(anchorPayload)));
-        // 调用智能合约创建生产请求（链上主业务对象）
-        // 入参包含：订单号、目标厂商、BOM 文件哈希、数量、设计文档哈希、交付时间、质量要求哈希
-        smartContractInvokeService.createProductionRequest(
+        request.setTxHash(smartContractInvokeService.createProductionRequest(
                 request.getOrderId(),
                 request.getTargetManufacturer(),
                 bom.getFileHash(),
@@ -104,7 +95,7 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
                 request.getDesignDocHash(),
                 request.getExpectedDelivery(),
                 qualityReqHash
-        );
+        ));
         // 合约 create 后默认状态为 CREATED；
         // 为与数据库中的“待接单(PENDING_ACCEPTANCE)”语义保持一致，立即同步更新合约状态
         smartContractInvokeService.updateProductionRequestStatus(request.getOrderId(), Constants.PENDING_ACCEPTANCE);
@@ -145,8 +136,6 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         if (!Constants.PENDING_ACCEPTANCE.equals(order.getStatus())) {
             throw new BusinessException("仅待接单状态的订单可撤销");
         }
-        String payload = order.getOrderId() + "|" + supplierId + "|CANCELLED";
-        blockchainAnchorService.anchor("PRODUCTION_ORDER_CANCEL", HashUtil.sha256Hex(payload));
         smartContractInvokeService.updateProductionRequestStatus(order.getOrderId(), Constants.CANCELLED);
         update(new LambdaUpdateWrapper<ProductionRequest>()
                 .eq(ProductionRequest::getId, orderDbId)

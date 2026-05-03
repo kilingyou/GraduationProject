@@ -155,9 +155,6 @@ public class AssemblerQualityController {
         r.setTestReportHash(ev.getFileHash());
         r.setTestReportCid(ev.getIpfsCid());
         r.setTestResult(result);
-        if (r.getTxHash() == null || r.getTxHash().trim().isEmpty()) {
-            r.setTxHash(ev.getTxHash());
-        }
     }
 
     @GetMapping("/report/list")

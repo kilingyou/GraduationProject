@@ -33,11 +33,12 @@ public class ProductionRequest {
 
     private Long targetManufacturer;
 
-    /** 指定组装商；NULL 表示任意组装商可领用该单下已放行部件 */
+    /** 指定组装商；NULL 表示任意组装商可领用该单下部件 */
     private Long assemblyAssemblerId;
 
     private String status;
 
+    /** 发布订单时 {@code createProductionRequest} 合约交易哈希（与后续状态变更交易区分）。 */
     private String txHash;
 
     @TableField(fill = FieldFill.INSERT)

@@ -209,7 +209,6 @@
             <el-descriptions-item label="ECID 总数">{{ progressSummary.ecidTotal }}</el-descriptions-item>
             <el-descriptions-item label="质检通过">{{ progressSummary.ecidQcPassCount }}</el-descriptions-item>
             <el-descriptions-item label="已上链">{{ progressSummary.ecidOnChainCount }}</el-descriptions-item>
-            <el-descriptions-item label="已放行组装">{{ progressSummary.ecidReleasedToAssemblerCount }}</el-descriptions-item>
             <el-descriptions-item label="已组装">{{ progressSummary.ecidAssembledCount }}</el-descriptions-item>
           </el-descriptions>
           <div class="progress-actions mb-16">

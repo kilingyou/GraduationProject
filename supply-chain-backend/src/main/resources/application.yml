@@ -74,7 +74,7 @@ scm:
     fisco:
       config-file: conf/config.toml
       group-id: 1
-      contract-address: "0x7e5b0ec00ccb1c94248f419570296cba6898db5b"
+      contract-address: "0xb628b9140bbd1d4ecccc991434db7025d18a7836"
       abi-path: conf/abi
       bin-path: conf/bin
   scheduler:

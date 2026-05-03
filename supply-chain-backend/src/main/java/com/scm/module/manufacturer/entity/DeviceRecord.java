@@ -39,9 +39,6 @@ public class DeviceRecord {
 
     private Integer chainRegistered;
 
-    /** 制造商已放行给组装商后方可被组装商扫码领用（1=已放行） */
-    private Integer releasedToAssembler;
-
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

@@ -18,7 +18,7 @@ public interface ProductionRequestService extends IService<ProductionRequest> {
     void cancelOrderBySupplier(Long orderDbId, Long supplierId);
 
     /**
-     * 指定可领用本单部件的组装商；{@code null} 表示不限制（任意组装商可领用已放行部件）。
+     * 指定可领用本单部件的组装商；{@code null} 表示不限制。
      */
     void designateAssemblyAssembler(Long orderDbId, Long supplierId, Long assemblyAssemblerUserId);
 

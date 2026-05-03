@@ -18,7 +18,7 @@
           <template v-if="contextSummary">
             <span class="context-meta">
               批次 {{ contextSummary.batchCount }} · ECID {{ contextSummary.ecidTotal }} · 已上链
-              {{ contextSummary.ecidOnChainCount }} · 已放行组装 {{ contextSummary.ecidReleasedToAssemblerCount }}
+              {{ contextSummary.ecidOnChainCount }}
             </span>
           </template>
         </div>
@@ -105,14 +105,6 @@
               <template #default="{ row }">
                 <el-button type="primary" link @click="goToEcidTab(row)">管理ECID</el-button>
                 <el-button
-                  type="warning"
-                  link
-                  :loading="releasingBatchId === row.batchId"
-                  @click="handleReleaseBatchToAssembler(row)"
-                >
-                  放行本批次
-                </el-button>
-                <el-button
                   v-if="row.status !== 'COMPLETED'"
                   type="success"
                   link
@@ -145,7 +137,7 @@
             :closable="false"
             show-icon
             class="batch-hint"
-            title="上链注册前须在「质检」页：上传报告（绑定报告哈希）并标记合格；本页生成 ECID 数量累计不得超过批次计划数。组装商领料前须在本页或批次列表对「已质检合格且已上链」的部件执行「放行给组装商」。"
+            title="上链注册前须在「质检」页：上传报告（绑定报告哈希）并标记合格；本页生成 ECID 数量累计不得超过批次计划数。组装商领料须部件已质检合格且已上链。"
           />
           <!-- Generate form -->
           <el-form :inline="true" :model="ecidGenForm" :rules="ecidGenRules" ref="ecidGenFormRef" class="inline-form">
@@ -202,14 +194,6 @@
             >
               导出选中
             </el-button>
-            <el-button
-              type="warning"
-              :disabled="!selectedEcids.length"
-              :loading="releasingSelected"
-              @click="handleReleaseSelectedToAssembler"
-            >
-              放行给组装商 ({{ selectedEcids.length }})
-            </el-button>
           </div>
 
           <el-form :inline="true" class="ecid-filter-bar" @submit.prevent="handleEcidFilterSearch">
@@ -235,12 +219,6 @@
               <el-select v-model="ecidQuery.chainFlag" placeholder="全部" clearable style="width: 120px">
                 <el-option label="已上链" value="1" />
                 <el-option label="未上链" value="0" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="组装放行">
-              <el-select v-model="ecidQuery.releasedFlag" placeholder="全部" clearable style="width: 120px">
-                <el-option label="已放行" value="1" />
-                <el-option label="待放行" value="0" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -323,13 +301,6 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="组装放行" width="100" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.releasedToAssembler === 1 ? 'success' : 'warning'" effect="plain" size="small">
-                  {{ row.releasedToAssembler === 1 ? '已放行' : '待放行' }}
-                </el-tag>
-              </template>
-            </el-table-column>
             <el-table-column label="操作" width="260" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button
@@ -384,7 +355,6 @@ import {
   getEcidList,
   getOrderBomItemsForProduction,
   registerEcids,
-  releasePartsToAssembler,
   getOrderProductionSummary
 } from '@/api/manufacturer'
 import { useUserStore } from '@/store/user'
@@ -526,60 +496,6 @@ async function handleBatchComplete(row) {
   }
 }
 
-async function handleReleaseBatchToAssembler(row) {
-  if (!row?.batchId) return
-  try {
-    await ElMessageBox.confirm(
-      '将本批次中「质检合格且已上链、尚未放行」的部件全部标记为已放行给组装商，组装商即可在系统中领料。',
-      '放行给组装商',
-      { type: 'warning' }
-    )
-    releasingBatchId.value = row.batchId
-    const { data } = await releasePartsToAssembler({ batchId: row.batchId })
-    const n = data?.released ?? 0
-    if (n === 0) {
-      ElMessage.warning('无可放行部件（需质检合格、已上链且尚未放行）')
-    } else {
-      ElMessage.success(`已放行 ${n} 条`)
-    }
-    fetchEcids()
-    fetchBatches()
-  } catch (e) {
-    if (e !== 'cancel') {
-      /* 拦截器 */
-    }
-  } finally {
-    releasingBatchId.value = ''
-  }
-}
-
-async function handleReleaseSelectedToAssembler() {
-  if (!selectedEcids.value.length) return
-  try {
-    await ElMessageBox.confirm(
-      `将选中的 ${selectedEcids.value.length} 条中符合条件的部件标记为已放行给组装商（须质检合格、已上链）。`,
-      '放行给组装商',
-      { type: 'warning' }
-    )
-    releasingSelected.value = true
-    const ecids = selectedEcids.value.map((r) => r.ecid).filter(Boolean)
-    const { data } = await releasePartsToAssembler({ ecids })
-    const n = data?.released ?? 0
-    if (n === 0) {
-      ElMessage.warning('无符合条件可放行的部件')
-    } else {
-      ElMessage.success(`已放行 ${n} 条`)
-    }
-    fetchEcids()
-  } catch (e) {
-    if (e !== 'cancel') {
-      /* 拦截器 */
-    }
-  } finally {
-    releasingSelected.value = false
-  }
-}
-
 // ================== ECID management ==================
 const ECID_STATUS = {
   PRODUCED: { label: '已生成', type: 'info' },
@@ -597,8 +513,6 @@ const ecidStatusType = (s) => ECID_STATUS[s]?.type ?? 'info'
 const ecidLoading = ref(false)
 const ecidGenerating = ref(false)
 const registering = ref(false)
-const releasingSelected = ref(false)
-const releasingBatchId = ref('')
 const ecidList = ref([])
 const ecidTotal = ref(0)
 const selectedEcids = ref([])
@@ -610,8 +524,7 @@ const ecidQuery = reactive({
   orderId: undefined,
   keyword: '',
   status: '',
-  chainFlag: '',
-  releasedFlag: ''
+  chainFlag: ''
 })
 const ecidGenForm = reactive({ batchId: '', quantity: 10, deviceType: '' })
 
@@ -703,7 +616,6 @@ function handleEcidFilterReset() {
   ecidQuery.keyword = ''
   ecidQuery.status = ''
   ecidQuery.chainFlag = ''
-  ecidQuery.releasedFlag = ''
   ecidQuery.page = 1
   fetchEcids()
 }
@@ -719,9 +631,6 @@ async function fetchEcids() {
     if (ecidQuery.status) params.status = ecidQuery.status
     if (ecidQuery.chainFlag === '0' || ecidQuery.chainFlag === '1') {
       params.chainRegistered = Number(ecidQuery.chainFlag)
-    }
-    if (ecidQuery.releasedFlag === '0' || ecidQuery.releasedFlag === '1') {
-      params.releasedToAssembler = Number(ecidQuery.releasedFlag)
     }
     const { data } = await getEcidList(params)
     ecidList.value = data.records ?? data.list ?? []

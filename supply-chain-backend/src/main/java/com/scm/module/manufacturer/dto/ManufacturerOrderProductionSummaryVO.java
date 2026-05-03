@@ -29,8 +29,6 @@ public class ManufacturerOrderProductionSummaryVO {
 
     private long ecidOnChainCount;
 
-    private long ecidReleasedToAssemblerCount;
-
     private long ecidAssembledCount;
 
     private List<BatchBrief> batches = new ArrayList<>();

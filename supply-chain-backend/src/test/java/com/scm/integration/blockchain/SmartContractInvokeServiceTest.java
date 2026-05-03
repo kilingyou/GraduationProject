@@ -46,8 +46,9 @@ class SmartContractInvokeServiceTest {
         when(userMapper.selectById(99L)).thenReturn(withAddress("0x1111111111111111111111111111111111111111"));
         when(userMapper.selectById(100L)).thenReturn(withPrivateKey("abc123"));
 
-        service.createProductionRequest("OID-1", 99L, "bomHash", 10, "designHash",
+        String tx = service.createProductionRequest("OID-1", 99L, "bomHash", 10, "designHash",
                 LocalDate.of(2026, 4, 8), "qualityHash");
+        assertEquals("0xabc", tx);
 
         ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
         verify(fisco).sendTransactionByPrivateKey(eq("abc123"), eq("createProductionRequest"), captor.capture());

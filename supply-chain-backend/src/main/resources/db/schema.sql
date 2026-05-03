@@ -90,7 +90,7 @@ CREATE TABLE sys_supplier_audit (
     auditor_id        BIGINT       COMMENT '审核人ID',
     audit_opinion     VARCHAR(500),
     audit_time        DATETIME,
-    tx_hash           VARCHAR(128) COMMENT '上链交易哈希',
+    tx_hash           VARCHAR(128) COMMENT '合约交易哈希：通过=approveSupplier，驳回=revokeSupplier',
     create_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
@@ -180,7 +180,7 @@ CREATE TABLE bus_production_request (
     target_manufacturer BIGINT       COMMENT '定向制造商ID(NULL为广播)',
     assembly_assembler_id BIGINT     NULL COMMENT '指定组装商用户ID(NULL不限制)',
     status              VARCHAR(30)  NOT NULL DEFAULT 'PENDING_ACCEPTANCE' COMMENT '订单状态',
-    tx_hash             VARCHAR(128),
+    tx_hash             VARCHAR(128) COMMENT 'createProductionRequest 合约交易哈希',
     create_time         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_supplier_id (supplier_id),
@@ -204,7 +204,7 @@ CREATE TABLE bus_manufacturing_agreement (
     agreement_cid     VARCHAR(200) COMMENT '协议文件IPFS CID',
     manufacturer_sign VARCHAR(500) COMMENT '制造商数字签名',
     supplier_sign     VARCHAR(500) COMMENT '供应商数字签名',
-    tx_hash           VARCHAR(128),
+    tx_hash           VARCHAR(128) COMMENT 'signManufacturingAgreement 合约交易哈希',
     create_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_order_id (order_id),
     INDEX idx_manufacturer_id (manufacturer_id)
@@ -243,13 +243,11 @@ CREATE TABLE bus_device_record (
     test_report_cid   VARCHAR(200) COMMENT '测试报告IPFS CID',
     tx_hash           VARCHAR(128) COMMENT '注册上链交易哈希',
     chain_registered  TINYINT      DEFAULT 0 COMMENT '是否已上链注册',
-    released_to_assembler TINYINT NOT NULL DEFAULT 0 COMMENT '制造商已放行给组装商(1)后方可领用',
     create_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_batch_id (batch_id),
     INDEX idx_manufacturer_id (manufacturer_id),
     INDEX idx_status (status),
-    INDEX idx_device_released (released_to_assembler),
     INDEX idx_device_order_bom_item (order_id, bom_item_id)
 ) COMMENT '设备记录表(ECID)';
 

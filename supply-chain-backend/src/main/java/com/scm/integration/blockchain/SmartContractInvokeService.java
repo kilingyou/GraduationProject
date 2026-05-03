@@ -31,9 +31,13 @@ public class SmartContractInvokeService {
     private final ObjectProvider<FiscoBcosBlockchainAnchorService> fiscoProvider;
     private final SysUserMapper sysUserMapper;
 
-    //创建生产订单
-    public void createProductionRequest(String orderId, Long targetManufacturerId, String bomHash, Integer quantity,
-                                        String designDocHash, LocalDate expectedDelivery, String qualityReqHash) {
+    /**
+     * 创建链上生产请求（合约 {@code createProductionRequest}，供应商私钥发送）。
+     *
+     * @return 该笔合约交易哈希，供业务表 {@code bus_production_request.tx_hash} 记录
+     */
+    public String createProductionRequest(String orderId, Long targetManufacturerId, String bomHash, Integer quantity,
+                                          String designDocHash, LocalDate expectedDelivery, String qualityReqHash) {
         List<Object> params = new ArrayList<>();
         params.add(empty(orderId));
         params.add(resolveAddressByUserId(targetManufacturerId));
@@ -42,16 +46,21 @@ public class SmartContractInvokeService {
         params.add(empty(designDocHash));
         params.add(expectedDelivery == null ? 0L : expectedDelivery.atStartOfDay().atZone(java.time.ZoneId.systemDefault()).toEpochSecond());
         params.add(empty(qualityReqHash));
-        sendRequired("createProductionRequest", params);
+        return sendRequired("createProductionRequest", params);
     }
 
-    public void signManufacturingAgreement(String orderId, String agreementHash, String priceClause, LocalDate deliveryDate) {
+    /**
+     * 制造商签署制造协议（合约 {@code signManufacturingAgreement}）。
+     *
+     * @return 该笔合约交易哈希，供 {@code bus_manufacturing_agreement.tx_hash} 记录
+     */
+    public String signManufacturingAgreement(String orderId, String agreementHash, String priceClause, LocalDate deliveryDate) {
         List<Object> params = new ArrayList<>();
         params.add(empty(orderId));
         params.add(empty(agreementHash));
         params.add(empty(priceClause));
         params.add(deliveryDate == null ? 0L : deliveryDate.atStartOfDay().atZone(java.time.ZoneId.systemDefault()).toEpochSecond());
-        sendRequired("signManufacturingAgreement", params);
+        return sendRequired("signManufacturingAgreement", params);
     }
 
     /** 与业务库 {@code bus_production_request.status} 对齐（合约不校验枚举，由业务层传入约定字符串）。 */
@@ -62,7 +71,12 @@ public class SmartContractInvokeService {
         sendRequired("updateProductionRequestStatus", params);
     }
 
-    public void registerDeviceRecord(String ecid, String orderId, String batchId, String devType, String testReportHash, String status) {
+    /**
+     * 设备 ECID 注册上链（合约 {@code registerDeviceRecord}）。
+     *
+     * @return 该笔合约交易哈希，供 {@code bus_device_record.tx_hash} 记录
+     */
+    public String registerDeviceRecord(String ecid, String orderId, String batchId, String devType, String testReportHash, String status) {
         List<Object> params = new ArrayList<>();
         params.add(empty(ecid));
         params.add(empty(orderId));
@@ -70,7 +84,7 @@ public class SmartContractInvokeService {
         params.add(empty(devType));
         params.add(empty(testReportHash));
         params.add(empty(status));
-        sendRequired("registerDeviceRecord", params);
+        return sendRequired("registerDeviceRecord", params);
     }
 
     public void recordProductionComplete(String orderId, String batchId, boolean passed, String testReportHash, String signatureHash) {
@@ -83,14 +97,19 @@ public class SmartContractInvokeService {
         sendRequired("recordProductionComplete", params);
     }
 
-    public void createAssemblyRecord(String sn, String ecidListJson, String batchNo, String fwVersion, String reportHash) {
+    /**
+     * 组装记录主数据上链（合约 {@code createAssemblyRecord}）。
+     *
+     * @return 该笔合约交易哈希，供 {@code bus_assembly_record.tx_hash} / {@code assembly_tx_hash} 记录
+     */
+    public String createAssemblyRecord(String sn, String ecidListJson, String batchNo, String fwVersion, String reportHash) {
         List<Object> params = new ArrayList<>();
         params.add(empty(sn));
         params.add(empty(ecidListJson));
         params.add(empty(batchNo));
         params.add(empty(fwVersion));
         params.add(empty(reportHash));
-        sendRequired("createAssemblyRecord", params);
+        return sendRequired("createAssemblyRecord", params);
     }
 
     public void bindEcidToSn(String ecid, String sn) {
@@ -98,6 +117,18 @@ public class SmartContractInvokeService {
         params.add(empty(ecid));
         params.add(empty(sn));
         sendRequired("bindEcidToSn", params);
+    }
+
+    /**
+     * 批量绑定 ECID→SN（合约 {@code bindEcidsToSn}），单笔交易替代多次 {@link #bindEcidToSn}。
+     *
+     * @return 该笔合约交易哈希（可选落库；业务主凭据仍以 {@link #createAssemblyRecord} 为准）
+     */
+    public String bindEcidsToSn(List<String> ecids, String sn) {
+        List<Object> params = new ArrayList<>();
+        params.add(ecids == null ? new ArrayList<>() : ecids);
+        params.add(empty(sn));
+        return sendRequired("bindEcidsToSn", params);
     }
 
     public void logTransfer(String sn, String trackingNo, Long receiverId, String transferType) {
@@ -148,7 +179,41 @@ public class SmartContractInvokeService {
         sendRequired("decommissionWithAgency", params);
     }
 
-    private void sendRequired(String functionName, List<Object> params) {
+    /**
+     * 监管机构准入供应商（合约 {@code approveSupplier}，需当前用户链上角色为监管方）。
+     *
+     * @param supplierUserId 供应商业务用户 id（解析其 {@code blockchainAddr}）
+     * @param qualHash       资质摘要 SHA-256 hex（与业务侧 digest 规则一致，写入链上 {@code SupplierApproved.qualHash}）
+     * @return 该笔合约交易哈希
+     */
+    public String approveSupplier(Long supplierUserId, String qualHash) {
+        String supplierAddr = resolveAddressByUserId(supplierUserId);
+        if (ZERO_ADDRESS.equals(supplierAddr)) {
+            throw new IllegalStateException("Supplier has no blockchain address: userId=" + supplierUserId);
+        }
+        List<Object> params = new ArrayList<>();
+        params.add(supplierAddr);
+        params.add(empty(qualHash));
+        return sendRequired("approveSupplier", params);
+    }
+
+    /**
+     * 撤销链上供应商准入（与 {@link #approveSupplier} 配对）。
+     *
+     * @return 交易哈希；若供应商无链上地址无法发交易则返回 {@code null}
+     */
+    public String revokeSupplier(Long supplierUserId) {
+        String supplierAddr = resolveAddressByUserId(supplierUserId);
+        if (ZERO_ADDRESS.equals(supplierAddr)) {
+            log.warn("Skip revokeSupplier: no blockchain address for userId={}", supplierUserId);
+            return null;
+        }
+        List<Object> params = new ArrayList<>();
+        params.add(supplierAddr);
+        return sendRequired("revokeSupplier", params);
+    }
+
+    private String sendRequired(String functionName, List<Object> params) {
         FiscoBcosBlockchainAnchorService fisco = fiscoProvider.getIfAvailable();
         if (fisco == null || !fisco.isAvailable()) {
             throw new IllegalStateException("FISCO unavailable for function: " + functionName);
@@ -160,6 +225,7 @@ public class SmartContractInvokeService {
         try {
             String txHash = fisco.sendTransactionByPrivateKey(privateKeyHex, functionName, params);
             log.info("Smart-contract call success: {} tx={}", functionName, txHash);
+            return txHash;
         } catch (Exception e) {
             throw new RuntimeException("Smart-contract call failed: " + functionName + ", err=" + e.getMessage(), e);
         }

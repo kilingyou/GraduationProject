@@ -9,8 +9,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
-import com.scm.common.util.HashUtil;
-import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.module.assembler.dto.AssemblyRecordCreateRequest;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
@@ -50,7 +48,6 @@ public class AssemblyRecordServiceImpl
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final Random RANDOM = new Random();
 
-    private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
     private final AssemblyBatchService assemblyBatchService;
     private final AssemblerIntakeService assemblerIntakeService;
@@ -81,7 +78,7 @@ public class AssemblyRecordServiceImpl
     }
 
     /**
-     * 根据前端提交的组装请求创建一条组装记录：校验批次与部件、上链锚定与合约调用、
+     * 根据前端提交的组装请求创建一条组装记录：校验批次与部件、合约上链、
      * 持久化组装记录、更新部件设备状态与批次完成进度。
      *
      * @param request      组装参数（批次号、ECID 列表、固件版本、可选 SN 等）
@@ -146,8 +143,8 @@ public class AssemblyRecordServiceImpl
             throw new BusinessException("ECID 列表序列化失败");
         }
 
-        //生成SN
-        String sn = StringUtils.hasText(request.getSn()) ? request.getSn().trim() : generateSn();
+        // 生成 SN：自定义须库内唯一；自动生成须避免碰撞后再上链
+        String sn = StringUtils.hasText(request.getSn()) ? request.getSn().trim() : generateUniqueSn();
         if (StringUtils.hasText(request.getSn())) {
             long exists = count(new LambdaQueryWrapper<AssemblyRecord>().eq(AssemblyRecord::getSn, sn));
             if (exists > 0) {
@@ -155,7 +152,7 @@ public class AssemblyRecordServiceImpl
             }
         }
 
-        // 组装记录实体：状态已组装，链上登记标记后续可单独处理
+        // 组装记录实体：合约已成功落链后与库状态一致（避免 chain_registered=0 却已在链上）
         AssemblyRecord record = new AssemblyRecord()
                 .setSn(sn)
                 .setAssemblyBatchNo(batch.getBatchNo())
@@ -163,22 +160,20 @@ public class AssemblyRecordServiceImpl
                 .setCurrentHolderId(assemblerId)
                 .setEcidList(ecidJson)
                 .setFirmwareVersion(request.getFirmwareVersion().trim())
-                .setStatus("ASSEMBLED")
-                .setChainRegistered(0)
                 .setAssemblyTime(LocalDateTime.now());
-        // 链下摘要上链锚定 + 智能合约写入组装主数据、逐 ECID 绑定 SN
-        String anchorPayload = sn + "|" + ecidJson + "|" + assemblerId;
-        record.setAssemblyTxHash(blockchainAnchorService.anchor("ASSEMBLY_CREATE", HashUtil.sha256Hex(anchorPayload)));
-        smartContractInvokeService.createAssemblyRecord(
+        // 智能合约：组装主数据一笔交易；ECID→SN 批量绑定一笔交易（不再使用通用 anchor 与逐条 bind）
+        String assemblyMainTx = smartContractInvokeService.createAssemblyRecord(
                 sn,
                 ecidJson,
                 batch.getBatchNo(),
                 record.getFirmwareVersion(),
                 record.getTestReportHash()
         );
-        for (String ecid : ecids) {
-            smartContractInvokeService.bindEcidToSn(ecid, sn);
-        }
+        smartContractInvokeService.bindEcidsToSn(ecids, sn);
+        record.setAssemblyTxHash(assemblyMainTx);
+        record.setTxHash(assemblyMainTx);
+        record.setChainRegistered(1);
+        record.setStatus("ON_CHAIN");
         save(record);
 
         // 参与组装的部件在设备台账中标记为已组装
@@ -238,8 +233,6 @@ public class AssemblyRecordServiceImpl
             if (record.getCurrentHolderId() == null && record.getAssemblerId() != null) {
                 record.setCurrentHolderId(record.getAssemblerId());
             }
-            String payload = record.getSn() + "|" + (record.getEcidList() != null ? record.getEcidList() : "");
-            record.setTxHash(blockchainAnchorService.anchor("ASSEMBLY_RECORD", HashUtil.sha256Hex(payload)));
         }
         return updateBatchById(records);
     }
@@ -262,8 +255,6 @@ public class AssemblyRecordServiceImpl
         if (record.getCurrentHolderId() == null && record.getAssemblerId() != null) {
             record.setCurrentHolderId(record.getAssemblerId());
         }
-        String payload = record.getSn() + "|" + (record.getEcidList() != null ? record.getEcidList() : "");
-        record.setTxHash(blockchainAnchorService.anchor("ASSEMBLY_RECORD", HashUtil.sha256Hex(payload)));
         return updateById(record);
     }
 

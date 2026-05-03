@@ -1,4 +1,5 @@
 pragma solidity ^0.4.25;
+pragma experimental ABIEncoderV2;
 
 contract SupplyChainTraceability {
     address public owner;
@@ -51,7 +52,7 @@ contract SupplyChainTraceability {
     mapping(uint256 => address) internal _anchorOperators;
     mapping(uint256 => uint256) internal _anchorTimestamps;
 
-//事件，通用锚定结构
+    //事件，通用锚定结构
     event AnchorEvent(
         uint256 indexed id,//锚定序号
         string bizType,//文件名(资质证书、营业执照)
@@ -130,7 +131,7 @@ contract SupplyChainTraceability {
     mapping(string => ManufacturingAgreement) internal _agreements;
 
     event ProductionRequestCreated(
-        string indexed orderId,
+        string orderId,
         address indexed supplier,
         address indexed targetManufacturer,
         string bomHash,
@@ -141,10 +142,10 @@ contract SupplyChainTraceability {
         uint256 ts
     );
 
-    event ProductionRequestStatusChanged(string indexed orderId, string status, address operator, uint256 ts);
+    event ProductionRequestStatusChanged(string orderId, string status, address operator, uint256 ts);
 
     event ManufacturingAgreementSigned(
-        string indexed orderId,
+        string orderId,
         string agreementHash,
         address indexed supplier,
         address indexed manufacturer,
@@ -165,7 +166,6 @@ contract SupplyChainTraceability {
     ) public onlyRole(ROLE_SUPPLIER) {
         require(bytes(orderId).length > 0, "empty orderId");
         require(!_productionRequests[orderId].exists, "order exists");
-
         _productionRequests[orderId] = ProductionRequest(
             true,
             msg.sender,
@@ -178,7 +178,6 @@ contract SupplyChainTraceability {
             "CREATED",
             now
         );
-
         emit ProductionRequestCreated(
             orderId,
             msg.sender,
@@ -291,8 +290,8 @@ contract SupplyChainTraceability {
     );
     event DeviceStatusUpdated(string ecid, string newStatus, address operator, uint256 ts);
     event ProductionComplete(
-        string indexed orderId,
-        string indexed batchId,
+        string orderId,
+        string batchId,
         bool passed,
         string testReportHash,
         string signatureHash,
@@ -300,8 +299,8 @@ contract SupplyChainTraceability {
         uint256 ts
     );
     event RejectRecord(
-        string indexed orderId,
-        string indexed batchId,
+        string orderId,
+        string batchId,
         string rejectRefId,
         string reason,
         string disposition,
@@ -329,7 +328,8 @@ contract SupplyChainTraceability {
             testReportHash,
             status
         );
-        emit DeviceRegistered(ecid, orderId, batchId, devType, testReportHash, msg.sender, now);
+        emit DeviceRegistered(ecid, orderId, batchId, devType,
+            testReportHash, msg.sender, now);
     }
 
     // 兼容旧接口：默认状态 REGISTERED，测试报告为空
@@ -404,7 +404,7 @@ contract SupplyChainTraceability {
     mapping(string => string) internal _snToEcidListJson;
 
     event AssemblyRecordCreated(string sn, string batchNo, string ecidListJson, address assembler, uint256 ts);
-//组装商调用 createAssemblyRecord 和 bindEcidToSn。这是溯源的核心！ 合约把 部件(ECID) -> 整机(SN) 的映射关系死死地绑定在了一起
+    // 组装商调用 createAssemblyRecord；ECID→SN 可用 bindEcidsToSn 单笔批量或 bindEcidToSn 单笔。
     function createAssemblyRecord(
         string sn,
         string ecidListJson,
@@ -412,13 +412,21 @@ contract SupplyChainTraceability {
         string fwVersion,
         string reportHash
     ) public onlyRole(ROLE_ASSEMBLER) {
-        _assemblies[sn] = AssemblyRecord(true, sn, ecidListJson, batchNo, fwVersion, reportHash, msg.sender, now);
+        _assemblies[sn] = AssemblyRecord(true, sn, ecidListJson, batchNo,
+            fwVersion, reportHash, msg.sender, now);
         _snToEcidListJson[sn] = ecidListJson;
         emit AssemblyRecordCreated(sn, batchNo, ecidListJson, msg.sender, now);
     }
 
     function bindEcidToSn(string ecid, string sn) public onlyRole(ROLE_ASSEMBLER) {
         _ecidToSn[ecid] = sn;
+    }
+
+    /** 单笔交易批量写入 ECID→SN 映射，替代多次 bindEcidToSn */
+    function bindEcidsToSn(string[] ecids, string sn) public onlyRole(ROLE_ASSEMBLER) {
+        for (uint256 i = 0; i < ecids.length; i++) {
+            _ecidToSn[ecids[i]] = sn;
+        }
     }
 
     function getSnEcidList(string sn) public view returns (string) {

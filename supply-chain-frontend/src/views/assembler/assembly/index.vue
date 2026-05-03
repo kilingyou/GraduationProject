@@ -41,7 +41,7 @@
           :closable="false"
           show-icon
           class="mb-16"
-          title="组装批次须绑定生产订单；创建整机时请选用该批次对应订单下、且制造商已「放行给组装商」的 ECID。"
+          title="组装批次须绑定生产订单；创建整机时请选用该批次对应订单下、制造商已质检合格且已上链的 ECID。"
         />
         <el-table :data="batchList" v-loading="batchLoading" border stripe>
           <el-table-column prop="batchNo" label="批次号" width="200" />

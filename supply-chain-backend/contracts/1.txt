@@ -1,0 +1,22 @@
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "time": "2026-05-03T16:52:58.199",
+    "txHash": "0xa9c5401298bf2fb65a499d24577826241cf74671ebb5965671b6601611177c1c",
+    "blockchainMode": "fisco",
+    "found": true,
+    "status": "0x0",
+    "statusOk": true,
+    "statusMsg": "None",
+    "blockNumber": "0x56f",
+    "blockHash": "0x6956f461dc8f790e15f7ecdfb81c81a1f32f4a4bf902e4363209d7609a0eb833",
+    "from": "0xae398d3989aa0f39967853b5747aec7d571f04c5",
+    "to": "0x7e5b0ec00ccb1c94248f419570296cba6898db5b",
+    "gasUsed": "0x41b18",
+    "contractAddress": "0x0000000000000000000000000000000000000000",
+    "logsCount": 1,
+    "ok": true,
+    "message": "Transaction receipt query success"
+  }
+}

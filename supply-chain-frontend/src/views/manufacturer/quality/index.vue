@@ -90,7 +90,7 @@
                 :loading="submitting"
                 @click="handlePass"
               >
-                标记合格并上链
+                标记合格
               </el-button>
               <el-button
                 v-if="qcForm.result === 'FAIL'"
@@ -283,7 +283,7 @@ async function handlePass() {
     return
   }
 
-  await ElMessageBox.confirm('确认标记为合格并上链？此操作不可撤销。', '质检确认', { type: 'warning' })
+  await ElMessageBox.confirm('确认标记为合格？此操作不可撤销。', '质检确认', { type: 'warning' })
 
   submitting.value = true
   try {
@@ -292,7 +292,7 @@ async function handlePass() {
       targetType: qcForm.targetType,
       targetId: qcForm.targetId
     })
-    ElMessage.success('已标记合格并上链')
+    ElMessage.success('已标记合格')
     resetForm()
     if (activeTab.value === 'reports') fetchReports()
   } catch { /* handled by interceptor */ } finally {

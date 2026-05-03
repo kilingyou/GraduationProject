@@ -16,7 +16,7 @@ public interface AssemblerIntakeQueryMapper {
 
     @Select("<script>"
             + "SELECT COUNT(*) FROM bus_device_record d "
-            + "WHERE d.status = #{status} AND d.chain_registered = 1 AND d.released_to_assembler = 1 "
+            + "WHERE d.status = #{status} AND d.chain_registered = 1 "
             + "AND NOT EXISTS (SELECT 1 FROM bus_assembly_record ar "
             + "WHERE JSON_CONTAINS(ar.ecid_list, JSON_QUOTE(d.ecid), '$')) "
             + "AND EXISTS (SELECT 1 FROM bus_production_request pr WHERE pr.order_id = d.order_id "
@@ -34,7 +34,7 @@ public interface AssemblerIntakeQueryMapper {
             + "SELECT d.ecid, d.device_type AS deviceType, d.batch_id AS batchId, d.order_id AS orderId, "
             + "d.bom_item_id AS bomItemId "
             + "FROM bus_device_record d "
-            + "WHERE d.status = #{status} AND d.chain_registered = 1 AND d.released_to_assembler = 1 "
+            + "WHERE d.status = #{status} AND d.chain_registered = 1 "
             + "AND NOT EXISTS (SELECT 1 FROM bus_assembly_record ar "
             + "WHERE JSON_CONTAINS(ar.ecid_list, JSON_QUOTE(d.ecid), '$')) "
             + "AND EXISTS (SELECT 1 FROM bus_production_request pr WHERE pr.order_id = d.order_id "

@@ -32,6 +32,7 @@ public class ManufacturingAgreement {
 
     private String supplierSign;
 
+    /** 签订协议时 {@code signManufacturingAgreement} 合约交易哈希。 */
     private String txHash;
 
     @TableField(fill = FieldFill.INSERT)

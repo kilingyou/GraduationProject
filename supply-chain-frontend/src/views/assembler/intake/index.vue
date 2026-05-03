@@ -102,7 +102,7 @@
         </el-button>
         <el-button style="margin-left: 8px" @click="handleDownloadTemplate">下载 Excel 模板</el-button>
         <template #tip>
-          <div class="el-upload__tip">上传后解析 ECID 列并逐条校验；模板首列为表头「ECID」。部件须制造商已放行给组装商且满足质检/上链条件方可通过。</div>
+          <div class="el-upload__tip">上传后解析 ECID 列并逐条校验；模板首列为表头「ECID」。部件须满足制造商质检通过、已上链等条件方可通过。</div>
         </template>
       </el-upload>
 

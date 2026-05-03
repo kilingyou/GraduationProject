@@ -105,15 +105,6 @@ public class AssemblerIntakeServiceImpl implements AssemblerIntakeService {
                     .setManufacturerBatchId(device.getBatchId());
         }
 
-        // 制造商必须已将部件放行给组装商（发运/放行）
-        if (device.getReleasedToAssembler() == null || device.getReleasedToAssembler() != 1) {
-            return r.setStatus(IntakeVerifyResult.REJECT)
-                    .setMessage("制造商尚未将部件放行给组装商，请待发运/放行后再领用")
-                    .setDeviceType(device.getDeviceType())
-                    .setManufacturerBatchId(device.getBatchId())
-                    .setOrderId(device.getOrderId());
-        }
-
         // 全部校验通过，填充成功信息与业务上下文
         r.setStatus(IntakeVerifyResult.PASS)
                 .setMessage("验证通过，可用于组装")
