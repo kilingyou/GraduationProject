@@ -16,9 +16,11 @@ import com.scm.module.supplier.entity.ProductionRequest;
 import com.scm.module.supplier.service.ProductionRequestService;
 import com.scm.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -77,12 +79,22 @@ public class AssemblyController {
     }
 
     /**
-     * 创建组装记录
+     * 创建组装记录（multipart）：业务字段 + 整机质检报告文件；落链时携带报告哈希，库内 {@code testResult} 为 PASS。
      */
-    @PostMapping("/record")
-    public Result<AssemblyRecord> createRecord(@RequestBody AssemblyRecordCreateRequest request) {
+    @PostMapping(value = "/record", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<AssemblyRecord> createRecord(
+            @RequestParam String batchNo,
+            @RequestParam(required = false) List<String> ecidList,
+            @RequestParam String firmwareVersion,
+            @RequestParam(required = false) String sn,
+            @RequestPart("qualityReport") MultipartFile qualityReport) {
         LoginUser loginUser = getCurrentUser();
-        AssemblyRecord created = assemblyRecordService.createFromRequest(request, loginUser.getUserId());
+        AssemblyRecordCreateRequest request = new AssemblyRecordCreateRequest();
+        request.setBatchNo(batchNo);
+        request.setEcidList(ecidList != null ? ecidList : new ArrayList<>());
+        request.setFirmwareVersion(firmwareVersion);
+        request.setSn(sn);
+        AssemblyRecord created = assemblyRecordService.createFromRequest(request, loginUser.getUserId(), qualityReport);
         return Result.ok(created);
     }
 

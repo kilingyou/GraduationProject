@@ -39,8 +39,9 @@ export function getAssemblyBatchList(params) {
   return request({ url: '/assembler/assembly/batch/list', method: 'get', params })
 }
 
-export function createAssemblyRecord(data) {
-  return request({ url: '/assembler/assembly/record', method: 'post', data })
+/** multipart：batchNo、firmwareVersion、ecidList（可多次 append）、可选 sn、qualityReport 文件 */
+export function createAssemblyRecord(formData) {
+  return request({ url: '/assembler/assembly/record', method: 'post', data: formData })
 }
 
 export function getAssemblyRecordList(params) {
@@ -59,14 +60,6 @@ export function exportAssemblySnShipFormat(params) {
 
 export function registerAssemblyOnChain(id) {
   return request({ url: `/assembler/assembly/record/${id}/register`, method: 'post' })
-}
-
-export function uploadAssemblyReport(data) {
-  return request({ url: '/assembler/quality/report', method: 'post', data })
-}
-
-export function getAssemblyReportList(params) {
-  return request({ url: '/assembler/quality/report/list', method: 'get', params })
 }
 
 export function getAssemblerDashboardStats() {

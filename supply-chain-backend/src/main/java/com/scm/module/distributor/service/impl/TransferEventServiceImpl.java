@@ -33,11 +33,25 @@ public class TransferEventServiceImpl
     private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
 
+    /**
+     * 发货：创建一条在途物流流转记录，调用合约 {@code logTransfer} 登记并将该笔交易哈希写入 {@code tx_hash}；同步组装记录状态为在途。
+     *
+     * @param sn 产品序列号
+     * @param senderId 发货方（须与组装记录当前货权方一致）
+     * @param receiverId 收货方用户 ID
+     * @param logisticsCompany 物流公司名称
+     * @param trackingNumber 物流单号
+     * @param shipTime 发货时间，为空则取当前时间
+     * @param estimatedArrival 预计到达时间
+     * @param transferType 流转类型，为空则默认 {@code SHIP}
+     * @return 已持久化并上链的流转事件
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TransferEvent shipTransfer(String sn, Long senderId, Long receiverId, String logisticsCompany,
                                       String trackingNumber, LocalDateTime shipTime, LocalDateTime estimatedArrival,
                                       String transferType) {
+        // 入参校验：SN、收发方、物流公司与运单号
         if (!StringUtils.hasText(sn)) {
             throw new BusinessException("SN 不能为空");
         }
@@ -52,6 +66,7 @@ public class TransferEventServiceImpl
         }
 
         String snNorm = sn.trim();
+        // 业务校验：组装记录存在、当前用户为货权方、终态不可再流转
         AssemblyRecord ar = assemblyRecordService.listBySn(snNorm);
         if (ar == null) {
             throw new BusinessException("未找到该 SN 的组装记录，无法发货");
@@ -63,6 +78,7 @@ public class TransferEventServiceImpl
             throw new BusinessException("该产品状态不允许再流转");
         }
 
+        // 同一 SN 仅允许一条未完结物流（待处理/在途），避免并发重复发货
         long open = count(new LambdaQueryWrapper<TransferEvent>()
                 .eq(TransferEvent::getSn, snNorm)
                 .in(TransferEvent::getStatus, "PENDING", "IN_TRANSIT"));
@@ -83,17 +99,17 @@ public class TransferEventServiceImpl
                 .setEstimatedArrival(estimatedArrival)
                 .setStatus("IN_TRANSIT");
 
-        String payload = snNorm + "|" + te.getTrackingNumber() + "|" + senderId + "|" + receiverId + "|" + st;
-        te.setTxHash(blockchainAnchorService.anchor("TRANSFER_EVENT", HashUtil.sha256Hex(payload)));
-        smartContractInvokeService.logTransfer(
+        String transferTxHash = smartContractInvokeService.logTransfer(
                 snNorm,
                 te.getTrackingNumber(),
                 receiverId,
                 te.getTransferType()
         );
+        te.setTxHash(transferTxHash);
 
         save(te);
 
+        // 与物流状态对齐：组装记录标记为在途
         ar.setStatus("IN_TRANSIT");
         assemblyRecordService.updateById(ar);
         return te;

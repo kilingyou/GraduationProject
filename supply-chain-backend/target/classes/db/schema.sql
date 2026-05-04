@@ -566,6 +566,9 @@ INSERT INTO sys_menu (parent_id, menu_name, path, component, perms, menu_type, i
 (29, '召回管理', '/regulator/recall', 'regulator/recall/index', 'regulator:recall:list', 'C', 'WarningFilled', 3),
 (29, '审计日志', '/regulator/log', 'regulator/log/index', 'regulator:log:list', 'C', 'Notebook', 4);
 
+-- 整机质检已并入「组装管理」创建记录流程，侧栏不再展示独立入口（新库种子）
+UPDATE sys_menu SET visible = 0 WHERE path = '/assembler/quality';
+
 -- 角色-菜单分配
 -- 系统管理员: 全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)

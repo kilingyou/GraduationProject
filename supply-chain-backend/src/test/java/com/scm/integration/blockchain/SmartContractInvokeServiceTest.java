@@ -67,7 +67,8 @@ class SmartContractInvokeServiceTest {
         when(userMapper.selectById(7L)).thenReturn(new SysUser());
         when(userMapper.selectById(100L)).thenReturn(withPrivateKey("abc123"));
 
-        service.logTransfer("SN-1", "T-1", 7L, "SHIP");
+        String tx = service.logTransfer("SN-1", "T-1", 7L, "SHIP");
+        assertEquals("0xdef", tx);
 
         ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
         verify(fisco).sendTransactionByPrivateKey(eq("abc123"), eq("logTransfer"), captor.capture());

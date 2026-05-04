@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.scm.module.assembler.dto.AssemblyRecordCreateRequest;
 import com.scm.module.assembler.entity.AssemblyRecord;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -12,7 +13,7 @@ public interface AssemblyRecordService extends IService<AssemblyRecord> {
 
     AssemblyRecord createRecord(AssemblyRecord record);
 
-    AssemblyRecord createFromRequest(AssemblyRecordCreateRequest request, Long assemblerId);
+    AssemblyRecord createFromRequest(AssemblyRecordCreateRequest request, Long assemblerId, MultipartFile qualityReport);
 
     IPage<AssemblyRecord> listByBatch(String batchNo, Page<AssemblyRecord> page);
 

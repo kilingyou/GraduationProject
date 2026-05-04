@@ -131,13 +131,18 @@ public class SmartContractInvokeService {
         return sendRequired("bindEcidsToSn", params);
     }
 
-    public void logTransfer(String sn, String trackingNo, Long receiverId, String transferType) {
+    /**
+     * 分销物流上链（合约 {@code logTransfer}）。
+     *
+     * @return 该笔合约交易哈希，供 {@code bus_transfer_event.tx_hash} 记录
+     */
+    public String logTransfer(String sn, String trackingNo, Long receiverId, String transferType) {
         List<Object> params = new ArrayList<>();
         params.add(empty(sn));
         params.add(empty(trackingNo));
         params.add(resolveAddressByUserId(receiverId));
         params.add(empty(transferType));
-        sendRequired("logTransfer", params);
+        return sendRequired("logTransfer", params);
     }
 
     public void registerSale(String sn, String customerHash, String invoiceHash) {

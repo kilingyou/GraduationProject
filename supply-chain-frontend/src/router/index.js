@@ -77,7 +77,6 @@ export const constantRoutes = [
     children: [
       { path: 'intake', name: 'CompIntake', component: () => import('@/views/assembler/intake/index.vue'), meta: { title: '部件入库', icon: 'Box' } },
       { path: 'assembly', name: 'Assembly', component: () => import('@/views/assembler/assembly/index.vue'), meta: { title: '组装管理', icon: 'Connection' } },
-      { path: 'quality', name: 'AsmQuality', component: () => import('@/views/assembler/quality/index.vue'), meta: { title: '整机质检', icon: 'Checked' } },
       {
         path: 'circulation',
         name: 'AsmCirculation',

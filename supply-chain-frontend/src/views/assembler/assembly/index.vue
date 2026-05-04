@@ -70,6 +70,13 @@
 
       <!-- Tab: Assembly Records -->
       <el-tab-pane label="组装记录" name="record">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="mb-16"
+          title="创建记录时将整机质检报告一并上传；存证哈希随组装主数据上链，结论记为合格（PASS）。"
+        />
         <el-form :inline="true" class="mb-16 filter-bar" @submit.prevent>
           <el-form-item label="批次筛选">
             <el-select
@@ -123,6 +130,26 @@
               <el-col :span="12">
                 <el-form-item label="整机 SN" prop="sn">
                   <el-input v-model="recordForm.sn" clearable placeholder="选填，不填则系统自动生成" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="24">
+                <el-form-item label="质检报告" prop="qcReport">
+                  <el-upload
+                    ref="qcUploadRef"
+                    :auto-upload="false"
+                    :limit="1"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                    :on-exceed="onQcExceed"
+                    :on-change="onQcFileChange"
+                    :on-remove="onQcRemove"
+                  >
+                    <el-button type="primary">选择文件</el-button>
+                    <template #tip>
+                      <span class="upload-tip">必填；建议 PDF，与链上报告哈希对应</span>
+                    </template>
+                  </el-upload>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -349,11 +376,14 @@ const assemblyBatchOrderId = computed(() => {
 
 // ---- Records ----
 const recordFormRef = ref()
-const recordForm = reactive({ batchNo: '', sn: '', ecidList: [], firmwareVersion: '' })
+const qcUploadRef = ref()
+const qcReportRaw = ref(null)
+const recordForm = reactive({ batchNo: '', sn: '', ecidList: [], firmwareVersion: '', qcReport: null })
 const recordRules = {
   batchNo: [{ required: true, message: '请选择批次', trigger: 'change' }],
   ecidList: [{ required: true, type: 'array', min: 1, message: '请添加至少一个 ECID', trigger: 'change' }],
-  firmwareVersion: [{ required: true, message: '请输入固件版本', trigger: 'blur' }]
+  firmwareVersion: [{ required: true, message: '请输入固件版本', trigger: 'blur' }],
+  qcReport: [{ required: true, message: '请上传整机质检报告', trigger: 'change' }]
 }
 const recordSubmitting = ref(false)
 const recordLoading = ref(false)
@@ -451,6 +481,22 @@ function isOnChain(row) {
   return row.status === 'ON_CHAIN' || row.chainRegistered === 1
 }
 
+function onQcExceed() {
+  ElMessage.warning('仅可上传 1 个质检报告文件')
+}
+
+function onQcFileChange(uploadFile) {
+  qcReportRaw.value = uploadFile?.raw || null
+  recordForm.qcReport = qcReportRaw.value ? (uploadFile?.name || 'file') : null
+  recordFormRef.value?.validateField('qcReport').catch(() => {})
+}
+
+function onQcRemove() {
+  qcReportRaw.value = null
+  recordForm.qcReport = null
+  recordFormRef.value?.validateField('qcReport').catch(() => {})
+}
+
 function onRecordFilterChange() {
   recordPage.pageNum = 1
   loadRecords()
@@ -482,12 +528,24 @@ async function handleCreateRecord() {
   if (!valid) return
   recordSubmitting.value = true
   try {
-    const res = await createAssemblyRecord({ ...recordForm })
+    const fd = new FormData()
+    fd.append('batchNo', recordForm.batchNo)
+    for (const ecid of recordForm.ecidList) {
+      if (ecid) fd.append('ecidList', String(ecid).trim())
+    }
+    fd.append('firmwareVersion', recordForm.firmwareVersion.trim())
+    const snTrim = (recordForm.sn || '').trim()
+    if (snTrim) fd.append('sn', snTrim)
+    fd.append('qualityReport', qcReportRaw.value)
+    const res = await createAssemblyRecord(fd)
     generatedSn.value = res.data?.sn || ''
-    ElMessage.success('创建组装记录成功')
+    ElMessage.success('创建组装记录成功（已含质检并上链）')
     recordFormRef.value.resetFields()
     recordForm.ecidList = []
     recordForm.sn = ''
+    recordForm.qcReport = null
+    qcReportRaw.value = null
+    qcUploadRef.value?.clearFiles()
     refreshEcidOptions()
     loadRecords()
     loadBatches()
@@ -606,5 +664,10 @@ onMounted(() => {
   &:hover {
     text-decoration: underline;
   }
+}
+.upload-tip {
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

@@ -257,8 +257,19 @@ function flattenShellDirectoryMenus(menus) {
   return out
 }
 
+/** 与动态路由一致：不展示 visible=0 的菜单（如已并入其他页的入口） */
+function filterMenusByVisible(nodes) {
+  if (!Array.isArray(nodes)) return []
+  return nodes
+    .filter(n => n.visible === 1 || n.visible == null)
+    .map(n => ({
+      ...n,
+      children: n.children?.length ? filterMenusByVisible(n.children) : n.children
+    }))
+}
+
 const visibleApiMenus = computed(() => {
-  const menus = Array.isArray(userStore.menus) ? userStore.menus : []
+  const menus = filterMenusByVisible(Array.isArray(userStore.menus) ? userStore.menus : [])
   const base = roleKey.value === 'admin' ? menus : menus.filter(top => top?.path !== '/system')
   return flattenShellDirectoryMenus(base)
 })

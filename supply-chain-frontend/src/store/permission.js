@@ -42,8 +42,9 @@ function buildRoutes(menus, parentPath = '') {
     }
 
     if (menu.children && menu.children.length > 0) {
-      route.children = buildRoutes(menu.children, menu.path)
-      route.redirect = menu.children[0]?.path
+      const visibleChildren = menu.children.filter(c => c.visible === 1 || c.visible == null)
+      route.children = buildRoutes(visibleChildren, menu.path)
+      route.redirect = visibleChildren[0]?.path
       if (!route.component) {
         route.component = () => import('@/views/assembler/circulation/ParentView.vue')
       }

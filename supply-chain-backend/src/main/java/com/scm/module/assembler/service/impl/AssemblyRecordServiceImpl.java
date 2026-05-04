@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scm.common.Constants;
 import com.scm.common.exception.BusinessException;
 import com.scm.integration.blockchain.SmartContractInvokeService;
+import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.assembler.dto.AssemblyRecordCreateRequest;
 import com.scm.module.assembler.dto.IntakeVerifyResult;
 import com.scm.module.assembler.entity.AssemblyBatch;
@@ -28,7 +29,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -55,6 +58,7 @@ public class AssemblyRecordServiceImpl
     private final ProductionRequestService productionRequestService;
     private final BomItemMapper bomItemMapper;
     private final ObjectMapper objectMapper;
+    private final EvidenceStorageService evidenceStorageService;
 
     @Override
     public AssemblyRecord createRecord(AssemblyRecord record) {
@@ -78,16 +82,17 @@ public class AssemblyRecordServiceImpl
     }
 
     /**
-     * 根据前端提交的组装请求创建一条组装记录：校验批次与部件、合约上链、
-     * 持久化组装记录、更新部件设备状态与批次完成进度。
+     * 根据前端提交的组装请求创建一条组装记录：校验批次与部件、上传整机质检报告（存证哈希上链）、
+     * 合约上链、持久化组装记录、更新部件设备状态与批次完成进度。
      *
-     * @param request      组装参数（批次号、ECID 列表、固件版本、可选 SN 等）
-     * @param assemblerId  当前操作方组装商 ID，用于权限与归属
+     * @param request        组装参数（批次号、ECID 列表、固件版本、可选 SN 等）
+     * @param assemblerId    当前操作方组装商 ID，用于权限与归属
+     * @param qualityReport  整机质检报告（必填），落链前写入 {@code testReportHash}，结论固定为合格
      * @return 已保存并落链后的组装记录
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public AssemblyRecord createFromRequest(AssemblyRecordCreateRequest request, Long assemblerId) {
+    public AssemblyRecord createFromRequest(AssemblyRecordCreateRequest request, Long assemblerId, MultipartFile qualityReport) {
         // 必填项：批次、至少一个 ECID、固件版本
         if (request == null || !StringUtils.hasText(request.getBatchNo())) {
             throw new BusinessException("请选择组装批次");
@@ -115,6 +120,9 @@ public class AssemblyRecordServiceImpl
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .collect(Collectors.toList());
+        if (ecids.isEmpty()) {
+            throw new BusinessException("请至少绑定一个有效 ECID");
+        }
         if (ecids.size() != new HashSet<>(ecids).size()) {
             throw new BusinessException("ECID 列表存在重复");
         }
@@ -133,6 +141,18 @@ public class AssemblyRecordServiceImpl
             if (probe == null || !batch.getOrderId().equals(probe.getOrderId())) {
                 throw new BusinessException("所选部件须属于本组装批次绑定的生产订单");
             }
+        }
+        if (qualityReport == null || qualityReport.isEmpty()) {
+            throw new BusinessException("请上传整机质检报告");
+        }
+        final EvidenceStorageService.StoredEvidence qcEvidence;
+        try {
+            qcEvidence = evidenceStorageService.store(
+                    qualityReport.getBytes(),
+                    qualityReport.getOriginalFilename(),
+                    "ASSEMBLY_QC_REPORT");
+        } catch (IOException e) {
+            throw new BusinessException("质检报告存证失败: " + e.getMessage());
         }
 
         // ECID 列表存库为 JSON；用户指定 SN 时需查重
@@ -160,7 +180,10 @@ public class AssemblyRecordServiceImpl
                 .setCurrentHolderId(assemblerId)
                 .setEcidList(ecidJson)
                 .setFirmwareVersion(request.getFirmwareVersion().trim())
-                .setAssemblyTime(LocalDateTime.now());
+                .setAssemblyTime(LocalDateTime.now())
+                .setTestReportHash(qcEvidence.getFileHash())
+                .setTestReportCid(qcEvidence.getIpfsCid())
+                .setTestResult("PASS");
         // 智能合约：组装主数据一笔交易；ECID→SN 批量绑定一笔交易（不再使用通用 anchor 与逐条 bind）
         String assemblyMainTx = smartContractInvokeService.createAssemblyRecord(
                 sn,
