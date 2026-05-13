@@ -192,13 +192,17 @@ public class SmartContractInvokeService {
      * @return 该笔合约交易哈希
      */
     public String approveSupplier(Long supplierUserId, String qualHash) {
+        // 由业务用户 id 查数据库得到链上账户地址，合约侧只认地址不认 id
         String supplierAddr = resolveAddressByUserId(supplierUserId);
+        // 注册阶段未生成地址时会落到零地址，此时无法对合约标识目标供应商
         if (ZERO_ADDRESS.equals(supplierAddr)) {
             throw new IllegalStateException("Supplier has no blockchain address: userId=" + supplierUserId);
         }
+        // approveSupplier(address, qualHash)：准入目标 + 资质摘要上链存证
         List<Object> params = new ArrayList<>();
         params.add(supplierAddr);
         params.add(empty(qualHash));
+        // 使用当前登录监管用户私钥签名发交易（见 sendRequired）
         return sendRequired("approveSupplier", params);
     }
 
@@ -218,26 +222,38 @@ public class SmartContractInvokeService {
         return sendRequired("revokeSupplier", params);
     }
 
+    /**
+     * 以当前登录用户的链上私钥向合约发送交易（需 FISCO 已就绪）。
+     */
     private String sendRequired(String functionName, List<Object> params) {
+        // 仅在 scm.blockchain.mode=fisco 且 SDK 初始化成功时可用
         FiscoBcosBlockchainAnchorService fisco = fiscoProvider.getIfAvailable();
         if (fisco == null || !fisco.isAvailable()) {
             throw new IllegalStateException("FISCO unavailable for function: " + functionName);
         }
+        // 从 SecurityContext 对应用户记录中解密得到 hex 私钥，用于本地签名
         String privateKeyHex = resolveCurrentUserPrivateKeyHex();
         if (!StringUtils.hasText(privateKeyHex)) {
             throw new IllegalStateException("Current user private key missing for function: " + functionName);
         }
         try {
+            // 指定私钥发交易，msg.sender 在链上为当前用户对应地址
             String txHash = fisco.sendTransactionByPrivateKey(privateKeyHex, functionName, params);
             log.info("Smart-contract call success: {} tx={}", functionName, txHash);
             return txHash;
         } catch (Exception e) {
+            // 统一包装为运行时异常，便于上层事务回滚或返回错误信息
             throw new RuntimeException("Smart-contract call failed: " + functionName + ", err=" + e.getMessage(), e);
         }
     }
 
+    /**
+     * 解析当前 HTTP 请求对应登录用户在库中存放的链上私钥（hex 字符串）。
+     * 未登录、非 {@link LoginUser}、无用户 id、无加密私钥字段或解码失败时返回空串，由调用方判定不可用。
+     */
     private String resolveCurrentUserPrivateKeyHex() {
         try {
+            // Spring Security 会话：JWT 过滤器通过后此处可拿到已认证主体
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !(authentication.getPrincipal() instanceof LoginUser)) {
                 return "";
@@ -246,10 +262,12 @@ public class SmartContractInvokeService {
             if (loginUser.getUserId() == null) {
                 return "";
             }
+            // 链上地址与私钥随用户注册写入 sys_user；此处按业务用户 id 再查一行拿密文字段
             SysUser user = sysUserMapper.selectById(loginUser.getUserId());
             if (user == null || !StringUtils.hasText(user.getPrivateKeyEnc())) {
                 return "";
             }
+            // Base64 解码得到 hex 私钥（见 decodePrivateKey）；供 SDK 本地签名发交易
             return decodePrivateKey(user.getPrivateKeyEnc());
         } catch (Exception e) {
             log.warn("Resolve current user private key failed: {}", e.getMessage());

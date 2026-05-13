@@ -25,26 +25,33 @@ public class ContractRoleSyncService {
     private final SysUserMapper sysUserMapper;
     private final SysRoleMapper sysRoleMapper;
 
+    /**
+     * 将业务库中的「主角色」同步到智能合约（{@code setRole}）：链上按地址绑定角色枚举。
+     * 缺用户、缺链上地址、未分配角色或角色无合约映射时静默跳过，避免无效上链。
+     */
     public void syncUserRoleToChain(Long userId) {
         if (userId == null) {
             return;
         }
         SysUser user = sysUserMapper.selectById(userId);
+        // 合约只认地址；无地址则无法作为 setRole 的第一个参数
         if (user == null || !StringUtils.hasText(user.getBlockchainAddr())) {
             log.warn("Skip role sync: user {} missing or no blockchainAddr", userId);
             return;
         }
+        // 用户可能有多角色，按 sortOrder 取一条作为主同步目标
         SysRole role = resolvePrimaryRole(userId);
         if (role == null || !StringUtils.hasText(role.getRoleKey())) {
             log.warn("Skip role sync: user {} has no role", userId);
             return;
         }
+        // 业务 roleKey → 合约内整型角色常量（如 supplier=1）
         Integer contractRole = mapRoleKey(role.getRoleKey());
         if (contractRole == null) {
             log.info("Skip role sync: role {} not mapped to contract", role.getRoleKey());
             return;
         }
-        //设置账户链上角色
+        // 调用合约 setRole(addr, contractRole)；交易由 FISCO Bean 初始化时的 SDK 账户签名（见 sendTransaction）
         setChainRole(user.getBlockchainAddr().trim(), contractRole, userId, role.getRoleKey());
     }
 
