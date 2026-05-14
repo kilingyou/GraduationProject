@@ -26,7 +26,7 @@ public interface ProductionBatchService extends IService<ProductionBatch> {
     IPage<ProductionBatch> pageByManufacturer(Long manufacturerId, Page<ProductionBatch> page, String orderId);
 
     /**
-     * 批次完工：本批次全部 ECID 已上链且质检合格；若订单下本企业所有批次均已完工，则订单标记为 COMPLETED。
+     * 批次完工：本批次全部 ECID 已上链且质检合格；订单需求全部满足后才标记订单为 COMPLETED。
      */
     void completeBatch(String batchId, Long manufacturerId);
 

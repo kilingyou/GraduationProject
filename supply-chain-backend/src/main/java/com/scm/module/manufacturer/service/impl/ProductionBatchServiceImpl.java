@@ -436,30 +436,87 @@ public class ProductionBatchServiceImpl
         batch.setCompletedQty(devices.size());
         updateById(batch);
 
+        if (!isOrderProductionComplete(batch.getOrderId(), manufacturerId)) {
+            return;
+        }
+
+        productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
+                .eq(ProductionRequest::getOrderId, batch.getOrderId())
+                .set(ProductionRequest::getStatus, Constants.COMPLETED));
+        blockchainAnchorService.anchor("PRODUCTION_ORDER_COMPLETE",
+                HashUtil.sha256Hex(batch.getOrderId() + "|" + manufacturerId));
+        smartContractInvokeService.recordProductionComplete(
+                batch.getOrderId(),
+                batch.getBatchId(),
+                true,
+                "",
+                "AUTO_COMPLETE"
+        );
+        smartContractInvokeService.updateProductionRequestStatus(batch.getOrderId(), Constants.COMPLETED);
+    }
+
+    private boolean isOrderProductionComplete(String orderId, Long manufacturerId) {
+        ProductionRequest order = productionRequestService.getOne(new LambdaQueryWrapper<ProductionRequest>()
+                .eq(ProductionRequest::getOrderId, orderId));
+        if (order == null) {
+            return false;
+        }
+
         List<ProductionBatch> allForOrder = list(new LambdaQueryWrapper<ProductionBatch>()
-                .eq(ProductionBatch::getOrderId, batch.getOrderId())
+                .eq(ProductionBatch::getOrderId, orderId)
                 .eq(ProductionBatch::getManufacturerId, manufacturerId));
-        boolean allDone = true;
+        if (allForOrder.isEmpty()) {
+            return false;
+        }
+
         for (ProductionBatch b : allForOrder) {
             if (!"COMPLETED".equals(b.getStatus())) {
-                allDone = false;
-                break;
+                return false;
             }
         }
-        if (allDone) {
-            productionRequestService.update(new LambdaUpdateWrapper<ProductionRequest>()
-                    .eq(ProductionRequest::getOrderId, batch.getOrderId())
-                    .set(ProductionRequest::getStatus, Constants.COMPLETED));
-            blockchainAnchorService.anchor("PRODUCTION_ORDER_COMPLETE",
-                    HashUtil.sha256Hex(batch.getOrderId() + "|" + manufacturerId));
-            smartContractInvokeService.recordProductionComplete(
-                    batch.getOrderId(),
-                    batch.getBatchId(),
-                    true,
-                    "",
-                    "AUTO_COMPLETE"
-            );
-            smartContractInvokeService.updateProductionRequestStatus(batch.getOrderId(), Constants.COMPLETED);
+
+        if (order.getBomId() != null) {
+            return isBomOrderProductionComplete(order, allForOrder);
         }
+        return isNonBomOrderProductionComplete(order, allForOrder);
+    }
+
+    private boolean isBomOrderProductionComplete(ProductionRequest order, List<ProductionBatch> completedBatches) {
+        List<BomItem> bomItems = bomItemMapper.selectList(new LambdaQueryWrapper<BomItem>()
+                .eq(BomItem::getBomId, order.getBomId()));
+        if (bomItems.isEmpty()) {
+            return false;
+        }
+
+        Map<Long, Integer> completedByBomItem = completedBatches.stream()
+                .filter(b -> b.getBomItemId() != null)
+                .collect(Collectors.groupingBy(
+                        ProductionBatch::getBomItemId,
+                        Collectors.summingInt(this::safeCompletedQty)));
+
+        int orderQty = order.getQuantity() == null ? 0 : order.getQuantity();
+        for (BomItem item : bomItems) {
+            int lineUse = item.getQuantity() == null || item.getQuantity() < 1 ? 1 : item.getQuantity();
+            int requiredQty = orderQty * lineUse;
+            if (requiredQty > 0 && completedByBomItem.getOrDefault(item.getId(), 0) < requiredQty) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isNonBomOrderProductionComplete(ProductionRequest order, List<ProductionBatch> completedBatches) {
+        int orderQty = order.getQuantity() == null ? 0 : order.getQuantity();
+        if (orderQty <= 0) {
+            return true;
+        }
+        int completedQty = completedBatches.stream()
+                .mapToInt(this::safeCompletedQty)
+                .sum();
+        return completedQty >= orderQty;
+    }
+
+    private int safeCompletedQty(ProductionBatch batch) {
+        return batch.getCompletedQty() == null ? 0 : batch.getCompletedQty();
     }
 }
