@@ -5,7 +5,7 @@
         <div class="card-header">
           <div class="title">产品绑定</div>
           <div class="hint">
-            绑定后方可投诉/报废。需该 SN 已销售登记，且填写的姓名、手机号须与销售登记时一致（与链上客户身份哈希比对）。
+            绑定后方可投诉/报废。匿名销售可仅填写 SN；实名销售填写的姓名、手机号需与销售登记一致。
           </div>
         </div>
       </template>
@@ -24,7 +24,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="手机号" prop="customerPhone">
-              <el-input v-model="bindForm.customerPhone" placeholder="与销售登记一致" clearable />
+              <el-input v-model="bindForm.customerPhone" placeholder="与销售登记一致（可留空）" clearable />
             </el-form-item>
           </el-col>
         </el-row>
@@ -51,8 +51,7 @@ import { bindUserProduct, getUserProductList } from '@/api/enduser'
 const bindFormRef = ref()
 const bindForm = reactive({ sn: '', customerName: '', customerPhone: '' })
 const bindRules = {
-  sn: [{ required: true, message: '请输入 SN', trigger: 'blur' }],
-  customerPhone: [{ required: true, message: '请输入手机号', trigger: 'blur' }]
+  sn: [{ required: true, message: '请输入 SN', trigger: 'blur' }]
 }
 const list = ref([])
 const loading = ref(false)

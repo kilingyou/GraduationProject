@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scm.common.exception.BusinessException;
 import com.scm.common.util.HashUtil;
-import com.scm.integration.blockchain.BlockchainAnchorService;
 import com.scm.integration.blockchain.SmartContractInvokeService;
 import com.scm.integration.evidence.EvidenceStorageService;
 import com.scm.module.assembler.entity.AssemblyRecord;
@@ -30,12 +29,11 @@ public class SalesRecordServiceImpl
         implements SalesRecordService {
 
     private final EvidenceStorageService evidenceStorageService;
-    private final BlockchainAnchorService blockchainAnchorService;
     private final SmartContractInvokeService smartContractInvokeService;
     private final AssemblyRecordService assemblyRecordService;
 
     /**
-     * 登记产品销售记录，完成客户信息处理、发票存证、链上锚定和状态流转。
+     * 登记产品销售记录，完成客户信息处理、发票存证、合约销售事件上链与状态流转。
      *
      * @param sn 产品唯一序列号
      * @param saleTime 销售时间，为空则使用当前时间
@@ -106,20 +104,17 @@ public class SalesRecordServiceImpl
             sale.setCustomerSegment(customerSegment.trim().toUpperCase());
         }
 
-        String invoiceHashPart = "";
-        // 可选发票附件：存证后记录文件哈希与 CID，并纳入上链摘要
+        // 可选发票附件：存证后记录文件哈希与 CID
         if (invoice != null && !invoice.isEmpty()) {
             EvidenceStorageService.StoredEvidence ev = evidenceStorageService.store(
                     invoice.getBytes(), invoice.getOriginalFilename(), "SALE_INVOICE");
             sale.setInvoiceHash(ev.getFileHash());
             sale.setInvoiceCid(ev.getIpfsCid());
-            invoiceHashPart = ev.getFileHash();
         }
 
-        // 生成销售登记锚定摘要并上链，同时调用合约写入销售事件
-        String anchorBase = sale.getSn() + "|" + sale.getSaleTime() + "|" + sale.getCustomerHash() + "|" + invoiceHashPart;
-        sale.setTxHash(blockchainAnchorService.anchor("SALE_REGISTER", HashUtil.sha256Hex(anchorBase)));
-        smartContractInvokeService.registerSale(sale.getSn(), sale.getCustomerHash(), sale.getInvoiceHash());
+        // 仅通过合约 registerSale 一笔交易上链；落库 tx_hash 为该交易哈希（不再额外 anchor）
+        sale.setTxHash(smartContractInvokeService.registerSale(
+                sale.getSn(), sale.getCustomerHash(), sale.getInvoiceHash()));
 
         // 持久化销售记录，并将组装记录状态流转为已售
         save(sale);

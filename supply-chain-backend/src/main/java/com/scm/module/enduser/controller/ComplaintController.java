@@ -28,6 +28,10 @@ public class ComplaintController {
     private final RecallRequestService recallRequestService;
     private final UserProductService userProductService;
 
+    /**
+     * 以 multipart/form-data 提交投诉/召回申请，可同时上传证据文件。
+     * <p>文本字段使用 {@code @RequestParam}，文件部分使用 {@code @RequestPart(name = "evidenceFiles")}。</p>
+     */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<RecallRequest> submitMultipart(
             @RequestParam String sn,
@@ -36,15 +40,20 @@ public class ComplaintController {
             @RequestPart(value = "evidenceFiles", required = false) MultipartFile[] evidenceFiles
     ) throws IOException {
         LoginUser loginUser = getCurrentUser();
+
+        // 组装业务实体，用户 ID 以当前登录用户为准，防止客户端伪造
         RecallRequest request = new RecallRequest();
         request.setUserId(loginUser.getUserId());
         request.setSn(sn);
         request.setFaultType(faultType);
         request.setFaultDesc(faultDesc);
+
+        // 仅允许对已绑定序列号的产品发起投诉
         if (!userProductService.isBound(loginUser.getUserId(), sn)) {
             throw new BusinessException("请先完成产品绑定后再提交投诉");
         }
 
+        // 未传文件时避免 NPE，统一交给服务层处理空列表
         List<MultipartFile> files = evidenceFiles == null ?
                 Collections.<MultipartFile>emptyList() :
                 Arrays.asList(evidenceFiles);

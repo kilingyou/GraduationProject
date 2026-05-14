@@ -145,12 +145,17 @@ public class SmartContractInvokeService {
         return sendRequired("logTransfer", params);
     }
 
-    public void registerSale(String sn, String customerHash, String invoiceHash) {
+    /**
+     * 销售登记上链（合约 {@code registerSale}，分销商私钥发送）。
+     *
+     * @return 该笔合约交易哈希，供 {@code bus_sales_record.tx_hash} 记录（与通用 {@code anchor} 分离，避免重复上链）
+     */
+    public String registerSale(String sn, String customerHash, String invoiceHash) {
         List<Object> params = new ArrayList<>();
         params.add(empty(sn));
         params.add(empty(customerHash));
         params.add(empty(invoiceHash));
-        sendRequired("registerSale", params);
+        return sendRequired("registerSale", params);
     }
 
     public void requestRecall(String sn, String faultType, String faultDesc) {

@@ -117,7 +117,7 @@
           <el-input v-model="bindForm.customerName" placeholder="与销售登记一致（可留空）" />
         </el-form-item>
         <el-form-item label="手机号" prop="customerPhone">
-          <el-input v-model="bindForm.customerPhone" placeholder="与销售登记一致，用于哈希比对" />
+          <el-input v-model="bindForm.customerPhone" placeholder="与销售登记一致（可留空）" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -172,8 +172,7 @@ const rules = {
 const formRef = ref(null)
 const bindForm = reactive({ sn: '', customerName: '', customerPhone: '' })
 const bindRules = {
-  sn: [{ required: true, message: '请输入产品 SN', trigger: 'blur' }],
-  customerPhone: [{ required: true, message: '请输入手机号', trigger: 'blur' }]
+  sn: [{ required: true, message: '请输入产品 SN', trigger: 'blur' }]
 }
 
 function openDialog() {

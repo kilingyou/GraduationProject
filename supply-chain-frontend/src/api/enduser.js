@@ -16,7 +16,7 @@ export function submitComplaint(data) {
   return request({ url: '/enduser/complaint', method: 'post', data })
 }
 
-/** body: { sn, customerName?, customerPhone } — 手机号与销售登记一致方可绑定 */
+/** body: { sn, customerName?, customerPhone? } — 匿名销售可仅凭 SN 绑定 */
 export function bindUserProduct(data) {
   return request({ url: '/enduser/product/bind', method: 'post', data })
 }
