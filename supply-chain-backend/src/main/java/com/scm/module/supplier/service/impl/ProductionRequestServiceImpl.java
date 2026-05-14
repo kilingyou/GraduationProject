@@ -79,6 +79,7 @@ public class ProductionRequestServiceImpl extends ServiceImpl<ProductionRequestM
         // 校验目标生产厂商是否已完成链上角色注册/就绪
         // 若未就绪，该方法内部应抛出异常中断流程
         ensureTargetManufacturerChainReady(request.getTargetManufacturer());
+
         // 生成业务订单号（去掉 UUID 中的 '-'，得到更紧凑的字符串）
         request.setOrderId(UUID.randomUUID().toString().replace("-", ""));
         // 新建订单初始状态：待接单

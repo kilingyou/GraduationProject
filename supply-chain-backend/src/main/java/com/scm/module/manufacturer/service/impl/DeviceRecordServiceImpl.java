@@ -402,6 +402,7 @@ public class DeviceRecordServiceImpl
     @Override
     public boolean registerOnChain(DeviceRegisterRequest request, Long manufacturerId) {
         List<Long> ids = request.getIds();
+        // 未传主键 id 时，按 ECID 解析出本厂商下的设备记录 id
         if (ids == null || ids.isEmpty()) {
             if (request.getEcids() == null || request.getEcids().isEmpty()) {
                 return false;
@@ -421,11 +422,13 @@ public class DeviceRecordServiceImpl
                     .filter(StringUtils::hasText)
                     .map(String::trim)
                     .collect(Collectors.toSet());
+            // 校验：请求的 ECID 必须全部存在且属于当前制造商
             if (!foundEcids.equals(wantedEcids)) {
                 throw new BusinessException("部分 ECID 不存在或无权操作");
             }
             ids = recs.stream().map(DeviceRecord::getId).collect(Collectors.toList());
         } else {
+            // 已传主键 id：校验记录存在且归属当前制造商
             List<DeviceRecord> recs = listByIds(ids);
             Set<Long> requested = new HashSet<>(ids);
             Set<Long> found = recs.stream().map(DeviceRecord::getId).collect(Collectors.toSet());

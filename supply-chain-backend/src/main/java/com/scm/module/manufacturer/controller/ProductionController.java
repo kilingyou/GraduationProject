@@ -220,22 +220,17 @@ public class ProductionController {
     public Result<List<String>> generateEcids(@RequestBody Map<String, Object> params) {
         // 获取当前登录用户
         LoginUser user = currentUser();
-
         // 获取批次ID
         String batchId = (String) params.get("batchId");
-
         // 获取订单ID，如果不存在则为 null
         String orderId = params.get("orderId") != null ? String.valueOf(params.get("orderId")) : null;
-
         // 优先读取 qty 参数，若不存在则尝试读取 quantity 参数
         Object q = params.get("qty");
         if (q == null) {
             q = params.get("quantity");
         }
-
         // 如果数量参数是数字类型，直接转为 Integer
         Integer qty = q instanceof Number ? ((Number) q).intValue() : null;
-
         // 如果不是数字类型但不为空，则尝试通过字符串转换为整数
         if (q != null && qty == null) {
             try {
@@ -244,18 +239,14 @@ public class ProductionController {
                 // 转换失败时忽略异常，qty 保持为 null
             }
         }
-
         // 获取设备类型
         String deviceType = params.get("deviceType") != null ? String.valueOf(params.get("deviceType")) : null;
-
         // 校验必要参数：批次ID不能为空，数量必须大于0
         if (batchId == null || batchId.trim().isEmpty() || qty == null || qty <= 0) {
             return Result.fail("参数不完整");
         }
-
         // 去除批次ID首尾空格
         batchId = batchId.trim();
-
         // 批量生成 ECID：
         // 如果没有传订单ID，则按批次生成；
         // 如果传了订单ID，则按批次 + 订单维度生成
