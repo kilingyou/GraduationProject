@@ -37,12 +37,25 @@ public class LogisticsController {
 
     private final TransferEventService transferEventService;
 
+    /**
+     * 单件发货（扫码/表单录入 SN）：登记一次货权转移与物流信息。
+     * <p>
+     * 分销商与组装商「渠道流通」前端共用本接口；发货方固定为当前登录用户，
+     * 接收方、物流公司、运单号等由请求体 {@link LogisticsShipRequest} 传入。
+     * 业务校验与链上锚定等在 {@link TransferEventService#shipTransfer} 中完成。
+     * </p>
+     *
+     * @param req 发货请求（须含 SN、接收方、物流公司与运单号等，见 DTO 字段说明）
+     * @return 新建的一条 {@link TransferEvent} 流转记录
+     */
     @PostMapping("/ship")
     public Result<TransferEvent> ship(@RequestBody LogisticsShipRequest req) {
+        // 当前登录用户作为发货方（sender）
         LoginUser u = getCurrentUser();
         if (req == null) {
             return Result.fail("请求体不能为空");
         }
+        // 落库流转事件，并在服务层校验货权、SN 状态及可选上链
         TransferEvent created = transferEventService.shipTransfer(
                 req.getSn(),
                 u.getUserId(),

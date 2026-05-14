@@ -5,7 +5,7 @@
       <template #header>
         <div class="card-header">
           <el-icon><Monitor /></el-icon>
-          <span>元器件来料扫码</span>
+          <span>扫码验证</span>
         </div>
       </template>
       <el-row :gutter="20">
@@ -83,7 +83,7 @@
       <template #header>
         <div class="card-header">
           <el-icon><Upload /></el-icon>
-          <span>批量导入</span>
+          <span>批量校验</span>
         </div>
       </template>
       <el-upload

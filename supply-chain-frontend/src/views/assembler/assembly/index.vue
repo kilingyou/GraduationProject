@@ -166,7 +166,7 @@
                     default-first-option
                     :remote-method="remoteSearchEcids"
                     :loading="ecidOptionsLoading"
-                    placeholder="点击展开或输入关键字筛选；与部件入库验证通过条件一致，也可手动输入后回车"
+                    placeholder="点击展开或输入关键字筛选；与扫码验证通过条件一致，也可手动输入后回车"
                     style="width: 100%"
                     @focus="onEcidSelectFocus"
                   >

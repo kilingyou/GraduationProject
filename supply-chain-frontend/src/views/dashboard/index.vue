@@ -124,7 +124,7 @@ const roleActions = {
     { label: '数据看板', path: '/manufacturer/dashboard', icon: 'DataAnalysis' }
   ],
   assembler: [
-    { label: '部件入库', path: '/assembler/intake', icon: 'Box', type: 'primary' },
+    { label: '扫码验证', path: '/assembler/intake', icon: 'Box', type: 'primary' },
     { label: '组装管理', path: '/assembler/assembly', icon: 'Connection' },
     { label: '物流流转', path: '/assembler/circulation/logistics', icon: 'Ship' },
     { label: '渠道库存', path: '/assembler/circulation/inventory', icon: 'GoodsFilled' },

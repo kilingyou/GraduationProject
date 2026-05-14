@@ -202,6 +202,7 @@ const roleLabels = {
 
 /** 按 path 覆盖标题，避免 sys_menu.menu_name 因 SQL 客户端编码错误入库后出现乱码 */
 const API_MENU_TITLE_BY_PATH = {
+  '/assembler/intake': '扫码验证',
   '/enduser': '终端用户',
   '/enduser/trace': '溯源查询',
   '/enduser/bind': '产品绑定',
