@@ -27,13 +27,20 @@ public class DecommissionServiceImpl
     private final SmartContractInvokeService smartContractInvokeService;
     private final AssemblyRecordService assemblyRecordService;
 
+    /**
+     * 创建报废登记：校验 SN 与整机档案、上链锚定（可选）、落库并同步整机状态为已报废。
+     * 若调用方已写入 {@code txHash}，则跳过链上锚定与合约调用，便于补录或幂等场景。
+     */
     @Override
     public Decommission createDecommission(Decommission decommission) {
+        // 入参：实体与 SN 必填
         if (decommission == null || !StringUtils.hasText(decommission.getSn())) {
             throw new BusinessException("SN 不能为空");
         }
         String snNorm = decommission.getSn().trim();
         decommission.setSn(snNorm);
+
+        // 整机档案必须存在且未报废，避免对无效或重复 SN 登记
         AssemblyRecord arCheck = assemblyRecordService.listBySn(snNorm);
         if (arCheck == null) {
             throw new BusinessException("未找到该 SN 的整机档案，无法报废登记");
@@ -46,6 +53,7 @@ public class DecommissionServiceImpl
             decommission.setStatus("APPLIED");
         }
 
+        // 未带交易哈希时：对业务字段摘要上链，并调用智能合约登记报废信息
         if (decommission.getTxHash() == null || decommission.getTxHash().trim().isEmpty()) {
             String payload = decommission.getSn() + "|"
                     + decommission.getApplicantId() + "|"
@@ -67,6 +75,7 @@ public class DecommissionServiceImpl
 
         save(decommission);
 
+        // 与报废单一致：整机档案标记为已报废
         arCheck.setStatus("DECOMMISSIONED");
         assemblyRecordService.updateById(arCheck);
 

@@ -158,12 +158,17 @@ public class SmartContractInvokeService {
         return sendRequired("registerSale", params);
     }
 
-    public void requestRecall(String sn, String faultType, String faultDesc) {
+    /**
+     * 投诉/召回申请登记上链（合约 {@code requestRecall}）。
+     *
+     * @return 该笔合约交易哈希，供 {@code bus_recall_request.tx_hash} 记录（不再额外 anchor）
+     */
+    public String requestRecall(String sn, String faultType, String faultDesc) {
         List<Object> params = new ArrayList<>();
         params.add(empty(sn));
         params.add(empty(faultType));
         params.add(empty(faultDesc));
-        sendRequired("requestRecall", params);
+        return sendRequired("requestRecall", params);
     }
 
     public void publishRecallNotice(String noticeNo, String affectedSnsJson) {

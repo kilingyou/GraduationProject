@@ -21,13 +21,21 @@ public class DecommissionController {
     private final DecommissionService decommissionService;
     private final UserProductService userProductService;
 
+    /**
+     * 终端用户提交产品报废申请。
+     * 申请人自动取当前登录用户；须已绑定该产品序列号，否则不允许申请。
+     */
     @PostMapping
     public Result<Decommission> apply(@RequestBody Decommission decommission) {
+        // 当前登录用户（申请人）
         LoginUser loginUser = getCurrentUser();
+        // 服务端写入申请人，避免客户端伪造 applicantId
         decommission.setApplicantId(loginUser.getUserId());
+        // 仅允许对已绑定到自己账号的产品发起报废
         if (!userProductService.isBound(loginUser.getUserId(), decommission.getSn())) {
             throw new BusinessException("请先完成产品绑定后再申请报废");
         }
+        // 持久化报废单并返回创建后的实体（含服务端生成的 id 等字段）
         Decommission created = decommissionService.createDecommission(decommission);
         return Result.ok(created);
     }
