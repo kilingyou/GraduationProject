@@ -2,31 +2,6 @@
 
 本项目是一个面向电子产品供应链场景的全流程追溯管理系统，覆盖供应商、制造商、组装商、经销商、监管方和终端用户等角色。系统通过业务数据、区块链存证和 IPFS 文件存储能力，实现从设计/BOM、生产、质检、组装、物流、销售、投诉、召回到报废的生命周期管理。
 
-## 技术栈
-
-### 后端
-
-- Java 8
-- Spring Boot 2.7.14
-- Spring Security
-- MyBatis-Plus
-- MySQL 8.0
-- Druid 连接池
-- JWT 认证
-- FISCO BCOS Java SDK
-- IPFS 集成
-- EasyExcel、iTextPDF
-
-### 前端
-
-- Vue 3
-- Vite
-- Vue Router
-- Pinia
-- Element Plus
-- Axios
-- ECharts / vue-echarts
-
 ## 项目结构
 
 ```text
@@ -52,6 +27,31 @@ GraduationProjectFinall
 │   └── package.json
 └── conf                          # FISCO BCOS SDK、ABI、BIN、证书等配置
 ```
+
+## 技术栈
+
+### 后端
+
+- Java 8
+- Spring Boot 2.7.14
+- Spring Security
+- MyBatis-Plus
+- MySQL 8.0
+- Druid 连接池
+- JWT 认证
+- FISCO BCOS Java SDK
+- IPFS 集成
+- EasyExcel、iTextPDF
+
+### 前端
+
+- Vue 3
+- Vite
+- Vue Router
+- Pinia
+- Element Plus
+- Axios
+- ECharts / vue-echarts
 
 ## 核心功能
 
@@ -211,3 +211,12 @@ npm run preview
 - 当前配置中的数据库账号、JWT 默认密钥、合约地址等适合本地开发，生产环境请通过环境变量或安全配置替换。
 - `target/`、`node_modules/` 等目录属于构建产物或依赖目录，不建议提交到版本库。
 - 如果不启用真实 FISCO BCOS 或 IPFS 节点，需要根据后端集成实现调整对应模式或服务可用性。
+
+## 项目声明
+
+- 项目名称：基于区块链完整性保证的电子供应链系统
+- 项目作者：庞可竣
+- 作者单位：暨南大学网络空间安全学院
+- 开发语言：Java
+- 框架：SpringBoot
+- 核心技术：区块链、智能合约、供应链
