@@ -123,12 +123,10 @@ public class ProductionBatchServiceImpl
                         .eq(ProductionBatch::getManufacturerId, manufacturerId)
                         .eq(ProductionBatch::getBomItemId, bomItemId));
 
-                // 累加该子件已计划生产数量
+                // 累加该子件仍占用订单需求的计划数量；已判定不合格的 ECID 可由后续批次补产
                 int sumPlannedLine = 0;
                 for (ProductionBatch b : lineBatches) {
-                    if (b.getPlannedQty() != null) {
-                        sumPlannedLine += b.getPlannedQty();
-                    }
+                    sumPlannedLine += effectivePlannedQty(b);
                 }
 
                 // 校验新建批次后，总计划量是否超过该子件需求上限
@@ -151,12 +149,10 @@ public class ProductionBatchServiceImpl
                         .eq(ProductionBatch::getOrderId, orderId)
                         .eq(ProductionBatch::getManufacturerId, manufacturerId));
 
-                // 累加已有批次的计划数量
+                // 累加已有批次仍占用订单需求的计划数量；已判定不合格的 ECID 可由后续批次补产
                 int sumPlanned = 0;
                 for (ProductionBatch b : existingForQty) {
-                    if (b.getPlannedQty() != null) {
-                        sumPlanned += b.getPlannedQty();
-                    }
+                    sumPlanned += effectivePlannedQty(b);
                 }
 
                 // 校验新建批次后，总计划量是否超过订单数量
@@ -301,7 +297,9 @@ public class ProductionBatchServiceImpl
             return;
         }
         Long cnt = deviceRecordMapper.selectCount(
-                new LambdaQueryWrapper<DeviceRecord>().eq(DeviceRecord::getBatchId, batchId.trim()));
+                new LambdaQueryWrapper<DeviceRecord>()
+                        .eq(DeviceRecord::getBatchId, batchId.trim())
+                        .ne(DeviceRecord::getStatus, Constants.REJECTED));
         int deviceCount = cnt == null ? 0 : cnt.intValue();
         int q = deviceCount;
         if (batch.getPlannedQty() != null && batch.getPlannedQty() > 0) {
@@ -328,7 +326,7 @@ public class ProductionBatchServiceImpl
         if (devices.isEmpty()) {
             throw new BusinessException("批次下无设备，无法完工");
         }
-        if (batch.getPlannedQty() != null && devices.size() < batch.getPlannedQty()) {
+        if (batch.getPlannedQty() != null && nonRejectedDeviceCount(devices) < batch.getPlannedQty()) {
             throw new BusinessException("已生成 ECID 数量少于计划数量，请先补足生产数量再完工");
         }
         for (DeviceRecord d : devices) {
@@ -367,7 +365,7 @@ public class ProductionBatchServiceImpl
         if (devices.isEmpty()) {
             return false;
         }
-        if (batch.getPlannedQty() != null && devices.size() < batch.getPlannedQty()) {
+        if (batch.getPlannedQty() != null && nonRejectedDeviceCount(devices) < batch.getPlannedQty()) {
             return false;
         }
         for (DeviceRecord d : devices) {
@@ -433,7 +431,7 @@ public class ProductionBatchServiceImpl
     private void finalizeBatchAndMaybeCompleteOrder(ProductionBatch batch, Long manufacturerId,
                                                     List<DeviceRecord> devices) {
         batch.setStatus("COMPLETED");
-        batch.setCompletedQty(devices.size());
+        batch.setCompletedQty(nonRejectedDeviceCount(devices));
         updateById(batch);
 
         if (!isOrderProductionComplete(batch.getOrderId(), manufacturerId)) {
@@ -469,16 +467,28 @@ public class ProductionBatchServiceImpl
             return false;
         }
 
+        List<ProductionBatch> demandBatches = new java.util.ArrayList<>();
         for (ProductionBatch b : allForOrder) {
+            if (effectivePlannedQty(b) > 0) {
+                demandBatches.add(b);
+            } else if (!isZeroDemandBatchResolved(b, manufacturerId)) {
+                return false;
+            }
+        }
+        if (demandBatches.isEmpty()) {
+            return false;
+        }
+
+        for (ProductionBatch b : demandBatches) {
             if (!"COMPLETED".equals(b.getStatus())) {
                 return false;
             }
         }
 
         if (order.getBomId() != null) {
-            return isBomOrderProductionComplete(order, allForOrder);
+            return isBomOrderProductionComplete(order, demandBatches);
         }
-        return isNonBomOrderProductionComplete(order, allForOrder);
+        return isNonBomOrderProductionComplete(order, demandBatches);
     }
 
     private boolean isBomOrderProductionComplete(ProductionRequest order, List<ProductionBatch> completedBatches) {
@@ -518,5 +528,44 @@ public class ProductionBatchServiceImpl
 
     private int safeCompletedQty(ProductionBatch batch) {
         return batch.getCompletedQty() == null ? 0 : batch.getCompletedQty();
+    }
+
+    private int effectivePlannedQty(ProductionBatch batch) {
+        int planned = batch.getPlannedQty() == null ? 0 : batch.getPlannedQty();
+        if (!StringUtils.hasText(batch.getBatchId())) {
+            return Math.max(planned, 0);
+        }
+        Long rejected = deviceRecordMapper.selectCount(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getBatchId, batch.getBatchId())
+                .eq(DeviceRecord::getStatus, Constants.REJECTED));
+        Long nonRejected = deviceRecordMapper.selectCount(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getBatchId, batch.getBatchId())
+                .ne(DeviceRecord::getStatus, Constants.REJECTED));
+        int reservedQty = Math.max(0, planned - (rejected == null ? 0 : rejected.intValue()));
+        int producedUsableQty = nonRejected == null ? 0 : nonRejected.intValue();
+        return Math.max(reservedQty, producedUsableQty);
+    }
+
+    private boolean isZeroDemandBatchResolved(ProductionBatch batch, Long manufacturerId) {
+        if (batch == null || !StringUtils.hasText(batch.getBatchId())) {
+            return true;
+        }
+        List<DeviceRecord> devices = deviceRecordMapper.selectList(new LambdaQueryWrapper<DeviceRecord>()
+                .eq(DeviceRecord::getBatchId, batch.getBatchId()));
+        for (DeviceRecord d : devices) {
+            if (Constants.REJECTED.equals(d.getStatus()) && !isDeviceReadyForBatchClose(d, manufacturerId)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int nonRejectedDeviceCount(List<DeviceRecord> devices) {
+        if (devices == null || devices.isEmpty()) {
+            return 0;
+        }
+        return (int) devices.stream()
+                .filter(d -> !Constants.REJECTED.equals(d.getStatus()))
+                .count();
     }
 }

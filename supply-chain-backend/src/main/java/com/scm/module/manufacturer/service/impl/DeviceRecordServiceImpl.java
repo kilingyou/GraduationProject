@@ -99,11 +99,12 @@ public class DeviceRecordServiceImpl
             int lineCap = orderQty * lineUse;
 
             if (lineCap > 0) {
-                // 统计当前订单、当前制造商、当前 BOM 子件下已生成的设备记录数量
+                // 统计当前订单、当前制造商、当前 BOM 子件下仍占用需求的设备记录数量；不合格件允许补产
                 long lineExisting = count(new LambdaQueryWrapper<DeviceRecord>()
                         .eq(DeviceRecord::getOrderId, orderId)
                         .eq(DeviceRecord::getManufacturerId, manufacturerId)
-                        .eq(DeviceRecord::getBomItemId, bomItemIdForRecord));
+                        .eq(DeviceRecord::getBomItemId, bomItemIdForRecord)
+                        .ne(DeviceRecord::getStatus, Constants.REJECTED));
 
                 // 校验本次生成后是否超出该子件的需求上限
                 if (lineExisting + qty > lineCap) {
@@ -129,9 +130,10 @@ public class DeviceRecordServiceImpl
 
         // 如果批次设置了计划数量，则生成的设备总数不能超过该计划数量
         if (batch.getPlannedQty() != null && batch.getPlannedQty() > 0) {
-            // 统计该批次下已经生成的设备数量
+            // 统计该批次下仍占用计划数量的设备数量；已不合格的 ECID 不再阻塞补产
             long existing = count(new LambdaQueryWrapper<DeviceRecord>()
-                    .eq(DeviceRecord::getBatchId, batchId));
+                    .eq(DeviceRecord::getBatchId, batchId)
+                    .ne(DeviceRecord::getStatus, Constants.REJECTED));
 
             // 校验本次生成后是否超过批次计划数量
             if (existing + qty > batch.getPlannedQty()) {

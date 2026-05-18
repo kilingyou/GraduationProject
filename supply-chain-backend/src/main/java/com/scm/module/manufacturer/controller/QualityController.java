@@ -15,6 +15,7 @@ import com.scm.module.manufacturer.entity.DeviceRecord;
 import com.scm.module.manufacturer.entity.QualityReport;
 import com.scm.module.manufacturer.entity.RejectRecord;
 import com.scm.module.manufacturer.service.DeviceRecordService;
+import com.scm.module.manufacturer.service.ProductionBatchService;
 import com.scm.module.manufacturer.service.QualityReportService;
 import com.scm.module.manufacturer.service.RejectDispositionService;
 import com.scm.module.manufacturer.service.RejectRecordService;
@@ -39,6 +40,7 @@ public class QualityController {
 
     private final QualityReportService qualityReportService;
     private final DeviceRecordService deviceRecordService;
+    private final ProductionBatchService productionBatchService;
     private final RejectRecordService rejectRecordService;
     private final RejectDispositionService rejectDispositionService;
     private final BlockchainAnchorService blockchainAnchorService;
@@ -180,6 +182,9 @@ public class QualityController {
             record.setDisposalStatus(disposalStatus);
             record.setTxHash(txHash);
             rejectRecordService.save(record);
+            if (dev != null && StringUtils.hasText(dev.getBatchId())) {
+                productionBatchService.refreshCompletedQtyFromDevices(dev.getBatchId());
+            }
         }
         return Result.ok();
     }
